@@ -1,6 +1,6 @@
 # DeNoti
 
-A lightweight cross-platform desktop app that monitors **GitHub Gists** and **local files** and automatically pops up a window whenever new content is detected. Each source lives in its own tab with an independent poll schedule.
+A lightweight cross-platform **Desk**top **Noti**fier application that monitors **GitHub Gists** and **local files** and automatically pops up whenever new content is received. It supports multiple sources and is easily combined with AI agents making it easy to automate your daily or weekly research habits and receive everything on your desktop!
 
 Supports **macOS**, **Linux**, and **Windows**.
 
@@ -54,16 +54,6 @@ npm start
 ```
 
 `npm start` compiles the TypeScript and launches Electron. DevTools open automatically in a detached window.
-
-**Build your own distributable:**
-
-```bash
-npm run package:mac    # macOS  → dist-package/*.dmg
-npm run package:linux  # Linux  → dist-package/*.AppImage
-npm run package:win    # Windows → dist-package/*.exe (NSIS installer)
-```
-
-> Cross-compiling (e.g. building a Windows installer on macOS) requires additional tooling. See the [electron-builder docs](https://www.electron.build/multi-platform-build) for details.
 
 ---
 
@@ -163,3 +153,13 @@ npm start       # Build + launch with DevTools
 ```
 
 See [docs/architecture.md](docs/architecture.md) for the full technical reference: process model, data model, IPC channels, polling lifecycle, and key invariants.
+
+**Build your own distributable:**
+
+```bash
+npm run package:mac    # macOS  → dist-package/*.dmg
+npm run package:linux  # Linux  → dist-package/*.AppImage
+npm run package:win    # Windows → dist-package/*.exe (NSIS installer)
+```
+
+> Cross-compiling (e.g. building a Windows installer on macOS) requires additional tooling. See the [electron-builder docs](https://www.electron.build/multi-platform-build) for details.
