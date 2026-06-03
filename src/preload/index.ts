@@ -4,6 +4,12 @@ contextBridge.exposeInMainWorld('api', {
   getWelcomePath: (): Promise<string> =>
     ipcRenderer.invoke('get-welcome-path'),
 
+  getConfig: (): Promise<unknown> =>
+    ipcRenderer.invoke('get-config'),
+
+  setConfig: (config: unknown): Promise<unknown> =>
+    ipcRenderer.invoke('set-config', config),
+
   getTabs: (): Promise<unknown> =>
     ipcRenderer.invoke('get-tabs'),
 

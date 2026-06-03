@@ -492,6 +492,12 @@ input[type="range"]::-webkit-slider-thumb {
   margin-top: 8px;
 }
 
+.settings-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 28px 0;
+}
+
 .save-status {
   margin-top: 16px;
   padding: 10px 14px;

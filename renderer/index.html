@@ -78,11 +78,6 @@
             <small>The ID from your Gist URL: gist.github.com/user/<strong>GIST_ID</strong></small>
           </div>
 
-          <div class="form-group">
-            <label for="github-token">GitHub Personal Access Token <span class="optional">(optional)</span></label>
-            <input type="password" id="github-token" placeholder="ghp_..." />
-            <small>Required for private gists. Increases API rate limit for public gists.</small>
-          </div>
         </div>
 
         <div class="form-group">
@@ -130,6 +125,14 @@
         </div>
 
         <div id="save-status" class="save-status hidden"></div>
+
+        <hr class="settings-divider" />
+
+        <div class="form-group">
+          <label for="global-token">GitHub Token <span class="optional">(global)</span></label>
+          <input type="password" id="global-token" placeholder="ghp_..." />
+          <small>Shared across all Gist tabs. Required for private gists; increases rate limits for public ones.</small>
+        </div>
       </div>
     </main>
 
@@ -380,7 +383,6 @@
       document.getElementById('settings-title').textContent = tab ? 'Edit Tab' : 'New Tab';
       document.getElementById('tab-name').value = tab ? tab.name : '';
       document.getElementById('gist-id').value = tab ? tab.gistId : '';
-      document.getElementById('github-token').value = tab ? tab.githubToken : '';
       document.getElementById('local-path').value =
         tab ? tab.localFilePath : await api.getWelcomePath();
       setIntervalControls(tab ? tab.pollIntervalMinutes : 30);
@@ -394,6 +396,9 @@
       saveStatus.textContent = '';
       saveStatus.className = 'save-status hidden';
 
+      const config = await api.getConfig();
+      document.getElementById('global-token').value = config.githubToken || '';
+
       showView('settings');
     }
 
@@ -404,7 +409,6 @@
         name,
         sourceType: currentSource,
         gistId: document.getElementById('gist-id').value.trim(),
-        githubToken: document.getElementById('github-token').value.trim(),
         localFilePath: document.getElementById('local-path').value.trim(),
         pollMode: currentPollMode,
         pollIntervalMinutes: getIntervalMinutes(),
@@ -420,6 +424,7 @@
       status.className = 'save-status';
 
       try {
+        await api.setConfig({ githubToken: document.getElementById('global-token').value.trim() });
         await api.setTabs(newTabs);
         tabs = newTabs;
         if (!editingTabId) activeTabId = tabData.id;

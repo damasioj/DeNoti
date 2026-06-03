@@ -20,7 +20,6 @@ interface Tab {
   name: string;
   sourceType: SourceType;
   gistId: string;
-  githubToken: string;
   localFilePath: string;
   pollMode: PollMode;
   pollIntervalMinutes: number;
@@ -32,15 +31,21 @@ interface TabPollState {
   lastUpdatedAt: string;
 }
 
+interface AppConfig {
+  githubToken: string;
+}
+
 interface StoreSchema {
   tabs: Tab[];
   tabStates: Record<string, TabPollState>;
+  config: AppConfig;
 }
 
 const store = new Store<StoreSchema>({
   defaults: {
     tabs: [],
     tabStates: {},
+    config: { githubToken: '' },
   },
 });
 
@@ -268,13 +273,14 @@ function fetchGist(tab: Tab): void {
   }
 
   const { lastEtag, lastUpdatedAt } = getTabState(tab.id);
+  const { githubToken } = store.get('config');
 
   const headers: Record<string, string> = {
     'User-Agent': 'DeNoti/0.1.0',
     Accept: 'application/vnd.github+json',
     'X-GitHub-Api-Version': '2022-11-28',
   };
-  if (tab.githubToken) headers['Authorization'] = `Bearer ${tab.githubToken}`;
+  if (githubToken) headers['Authorization'] = `Bearer ${githubToken}`;
   if (lastEtag) headers['If-None-Match'] = lastEtag;
 
   const req = https.request(
@@ -383,6 +389,9 @@ function initDefaultTabs(): void {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const oldSettings = (store as any).get('settings') as any;
   if (oldSettings?.gistId || oldSettings?.localFilePath) {
+    if (oldSettings.githubToken) {
+      store.set('config', { githubToken: oldSettings.githubToken });
+    }
     const name =
       oldSettings.sourceType === 'gist'
         ? `Gist ${oldSettings.gistId}`.trim()
@@ -393,9 +402,10 @@ function initDefaultTabs(): void {
         name,
         sourceType: oldSettings.sourceType || 'local',
         gistId: oldSettings.gistId || '',
-        githubToken: oldSettings.githubToken || '',
         localFilePath: oldSettings.localFilePath || welcomeFilePath(),
+        pollMode: 'interval',
         pollIntervalMinutes: oldSettings.pollIntervalMinutes || 30,
+        pollTime: '09:00',
       },
     ]);
     return;
@@ -407,7 +417,6 @@ function initDefaultTabs(): void {
       name: 'Welcome',
       sourceType: 'local',
       gistId: '',
-      githubToken: '',
       localFilePath: welcomeFilePath(),
       pollMode: 'interval',
       pollIntervalMinutes: 30,
@@ -418,6 +427,21 @@ function initDefaultTabs(): void {
 
 // IPC
 ipcMain.handle('get-welcome-path', () => welcomeFilePath());
+
+ipcMain.handle('get-config', () => store.get('config'));
+
+ipcMain.handle('set-config', (_event, config: AppConfig) => {
+  store.set('config', config);
+  // Clear etag cache for all gist tabs so they re-fetch with the updated token
+  const states = store.get('tabStates');
+  for (const tab of store.get('tabs')) {
+    if (tab.sourceType === 'gist' && states[tab.id]) {
+      states[tab.id] = { ...states[tab.id], lastEtag: '' };
+    }
+  }
+  store.set('tabStates', states);
+  return { success: true };
+});
 
 ipcMain.handle('get-tabs', () => store.get('tabs'));
 
@@ -450,7 +474,6 @@ ipcMain.handle('set-tabs', (_event, newTabs: Tab[]) => {
       const sourceChanged =
         oldTab.sourceType !== tab.sourceType ||
         oldTab.gistId !== tab.gistId ||
-        oldTab.githubToken !== tab.githubToken ||
         oldTab.localFilePath !== tab.localFilePath;
       if (sourceChanged) {
         const states = store.get('tabStates');
