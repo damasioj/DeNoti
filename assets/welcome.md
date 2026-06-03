@@ -49,4 +49,6 @@ Closing the window just hides it to the tray — DeNoti keeps polling in the bac
 
 DeNoti was designed as a companion for scheduled reports. Have a cron job, a CI pipeline, or a Claude Code routine write its output to a Gist (or a local/synced file), then point DeNoti at it. Each time the report updates, DeNoti surfaces it for you — no inbox required.
 
+For a full walkthrough — creating a Gist, generating a GitHub token, writing a Claude Code Routine that posts its output to that Gist, and wiring it all up in DeNoti — see **`assets/setup-guide.md`** in the application folder.
+
 **Ready?** Open **Settings** and choose your source. 🚀
