@@ -515,6 +515,33 @@ input[type="range"]::-webkit-slider-thumb {
   margin: 28px 0;
 }
 
+.checkbox-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.checkbox-row input[type="checkbox"] {
+  margin-top: 2px;
+  flex-shrink: 0;
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.checkbox-row label {
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.checkbox-row label strong {
+  color: var(--text);
+  font-size: 14px;
+}
+
 .save-status {
   margin-top: 16px;
   padding: 10px 14px;

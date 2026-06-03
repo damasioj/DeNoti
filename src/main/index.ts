@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, dialog } from 'electron';
+import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, dialog, powerMonitor } from 'electron';
 import * as path from 'path';
 import * as https from 'https';
 import * as fs from 'fs';
@@ -33,6 +33,8 @@ interface TabPollState {
 
 interface AppConfig {
   githubToken: string;
+  pollOnStartup: boolean;
+  pollOnWake: boolean;
 }
 
 interface StoreSchema {
@@ -45,7 +47,7 @@ const store = new Store<StoreSchema>({
   defaults: {
     tabs: [],
     tabStates: {},
-    config: { githubToken: '' },
+    config: { githubToken: '', pollOnStartup: true, pollOnWake: true },
   },
 });
 
@@ -87,7 +89,7 @@ function createWindow(): void {
   }
 
   mainWindow.webContents.once('did-finish-load', () => {
-    checkAllTabs();
+    if (store.get('config').pollOnStartup ?? true) checkAllTabs();
   });
 
   mainWindow.on('close', (event) => {
@@ -522,6 +524,10 @@ app.on('ready', () => {
   createWindow();
   createTray();
   startAllPolling();
+
+  powerMonitor.on('resume', () => {
+    if (store.get('config').pollOnWake ?? true) checkAllTabs();
+  });
 });
 
 app.on('before-quit', () => {
