@@ -249,6 +249,15 @@ app.on('ready', () => {
   createWindow();
   createTray();
   startPolling();
+
+  // Show window immediately on first launch so the user can reach Settings
+  const settings = store.get('settings') as Settings;
+  if (!settings.gistId) {
+    mainWindow?.once('ready-to-show', () => {
+      mainWindow?.show();
+      mainWindow?.webContents.send('navigate', 'settings');
+    });
+  }
 });
 
 app.on('window-all-closed', () => {
