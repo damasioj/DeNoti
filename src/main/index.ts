@@ -45,11 +45,14 @@ function createWindow(): void {
       nodeIntegration: false,
     },
     title: 'DeNoti',
-    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     backgroundColor: '#1a1a2e',
   });
 
   mainWindow.loadFile(path.join(app.getAppPath(), 'renderer/index.html'));
+
+  if (!app.isPackaged) {
+    mainWindow.webContents.openDevTools({ mode: 'detach' });
+  }
 
   mainWindow.on('close', (event) => {
     if (!isQuitting) {

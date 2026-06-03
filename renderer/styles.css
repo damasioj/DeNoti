@@ -49,7 +49,6 @@ html, body {
   display: flex;
   align-items: baseline;
   gap: 10px;
-  -webkit-app-region: drag;
   flex: 1;
   min-width: 0;
 }
