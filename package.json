@@ -16,7 +16,9 @@
     "appId": "com.joshuadamasio.denoti",
     "productName": "DeNoti",
     "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
-    "output": "release",
+    "directories": {
+      "output": "release"
+    },
     "files": [
       "dist/**/*",
       "renderer/**/*",
