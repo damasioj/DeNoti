@@ -10,6 +10,9 @@ contextBridge.exposeInMainWorld('api', {
   pollNow: (): Promise<void> =>
     ipcRenderer.invoke('poll-now'),
 
+  pickFile: (): Promise<string | null> =>
+    ipcRenderer.invoke('pick-file'),
+
   onContent: (callback: (data: unknown) => void): void => {
     ipcRenderer.on('gist-content', (_event, data) => callback(data));
   },

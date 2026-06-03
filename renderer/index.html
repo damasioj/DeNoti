@@ -42,15 +42,36 @@
         <h2>Settings</h2>
 
         <div class="form-group">
-          <label for="gist-id">GitHub Gist ID</label>
-          <input type="text" id="gist-id" placeholder="e.g. abc123def456..." />
-          <small>The ID from your Gist URL: gist.github.com/user/<strong>GIST_ID</strong></small>
+          <label>Data Source</label>
+          <div class="source-toggle">
+            <button type="button" class="source-btn" data-source="local">&#128193; Local File</button>
+            <button type="button" class="source-btn" data-source="gist">&#9729; GitHub Gist</button>
+          </div>
         </div>
 
-        <div class="form-group">
-          <label for="github-token">GitHub Personal Access Token <span class="optional">(optional)</span></label>
-          <input type="password" id="github-token" placeholder="ghp_..." />
-          <small>Required for private gists. Increases API rate limit for public gists.</small>
+        <div id="local-fields">
+          <div class="form-group">
+            <label for="local-path">File Path</label>
+            <div class="interval-row">
+              <input type="text" id="local-path" placeholder="/path/to/report.md" />
+              <button type="button" class="btn btn-secondary" id="browse-btn">Browse&hellip;</button>
+            </div>
+            <small>DeNoti watches this file and pops up whenever it changes on disk.</small>
+          </div>
+        </div>
+
+        <div id="gist-fields">
+          <div class="form-group">
+            <label for="gist-id">GitHub Gist ID</label>
+            <input type="text" id="gist-id" placeholder="e.g. abc123def456..." />
+            <small>The ID from your Gist URL: gist.github.com/user/<strong>GIST_ID</strong></small>
+          </div>
+
+          <div class="form-group">
+            <label for="github-token">GitHub Personal Access Token <span class="optional">(optional)</span></label>
+            <input type="password" id="github-token" placeholder="ghp_..." />
+            <small>Required for private gists. Increases API rate limit for public gists.</small>
+          </div>
         </div>
 
         <div class="form-group">
@@ -141,18 +162,46 @@
       intervalDisplay.textContent = formatInterval(parseInt(intervalInput.value));
     });
 
+    // --- Source toggle ---
+    let currentSource = 'local';
+    const sourceButtons = document.querySelectorAll('.source-btn');
+    const localFields = document.getElementById('local-fields');
+    const gistFields = document.getElementById('gist-fields');
+
+    function setSource(source) {
+      currentSource = source;
+      sourceButtons.forEach((btn) => {
+        btn.classList.toggle('active', btn.dataset.source === source);
+      });
+      localFields.classList.toggle('hidden', source !== 'local');
+      gistFields.classList.toggle('hidden', source !== 'gist');
+    }
+
+    sourceButtons.forEach((btn) => {
+      btn.addEventListener('click', () => setSource(btn.dataset.source));
+    });
+
+    document.getElementById('browse-btn').addEventListener('click', async () => {
+      const picked = await api.pickFile();
+      if (picked) document.getElementById('local-path').value = picked;
+    });
+
     async function loadSettings() {
       const settings = await api.getSettings();
       document.getElementById('gist-id').value = settings.gistId || '';
       document.getElementById('github-token').value = settings.githubToken || '';
+      document.getElementById('local-path').value = settings.localFilePath || '';
       intervalInput.value = settings.pollIntervalMinutes || 30;
       intervalDisplay.textContent = formatInterval(parseInt(intervalInput.value));
+      setSource(settings.sourceType || 'local');
     }
 
     document.getElementById('save-btn').addEventListener('click', async () => {
       const settings = {
+        sourceType: currentSource,
         gistId: document.getElementById('gist-id').value.trim(),
         githubToken: document.getElementById('github-token').value.trim(),
+        localFilePath: document.getElementById('local-path').value.trim(),
         pollIntervalMinutes: parseInt(intervalInput.value),
       };
 

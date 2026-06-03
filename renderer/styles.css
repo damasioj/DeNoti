@@ -294,6 +294,38 @@ html, body {
   font-size: 12px;
 }
 
+/* Source segmented toggle */
+.source-toggle {
+  display: flex;
+  gap: 8px;
+}
+
+.source-btn {
+  flex: 1;
+  padding: 12px;
+  background: var(--surface);
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-family: var(--font);
+  font-size: 14px;
+  font-weight: 600;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  -webkit-app-region: no-drag;
+}
+
+.source-btn:hover {
+  border-color: var(--accent2);
+  color: var(--text);
+}
+
+.source-btn.active {
+  background: var(--accent2);
+  color: white;
+  border-color: var(--accent);
+}
+
 .interval-row {
   display: flex;
   align-items: center;

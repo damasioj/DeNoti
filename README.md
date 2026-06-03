@@ -1,6 +1,6 @@
 # DeNoti
 
-A lightweight cross-platform desktop app that monitors a GitHub Gist and automatically pops up a window whenever new content is detected.
+A lightweight cross-platform desktop app that monitors a **GitHub Gist** or a **local file** and automatically pops up a window whenever new content is detected.
 
 Supports **macOS**, **Linux**, and **Windows**.
 
@@ -8,7 +8,9 @@ Supports **macOS**, **Linux**, and **Windows**.
 
 ## How It Works
 
-DeNoti runs quietly in your system tray and polls a GitHub Gist at a configurable interval. When the Gist is updated, the app brings itself to the foreground and displays the new content — rendered as Markdown.
+DeNoti runs quietly in your system tray and polls your chosen source at a configurable interval. When the source changes, the app brings itself to the foreground and displays the new content — rendered as Markdown.
+
+On first launch it shows a built-in welcome guide (`assets/welcome.md`) so you have something to see while you configure your own source.
 
 ---
 
@@ -28,21 +30,36 @@ npm install
 npm start
 ```
 
-The app will appear in your system tray. No window opens until new Gist content is detected (or you click the tray icon).
+On first launch the window opens automatically showing the welcome guide. After that, no window opens until new content is detected (or you click the tray icon).
 
 ---
 
 ## Configuration
 
-Click the **⚙** button in the app header or open the tray menu → **Settings**.
+Click the **⚙** button in the app header or open the tray menu → **Settings**, then choose a **Data Source**.
+
+### Local File
+
+| Setting | Description |
+|---|---|
+| **File Path** | Any text or Markdown file to watch. Click **Browse…** or paste a path. DeNoti pops up when the file's contents change on disk. |
+
+This is the default source on a fresh install (pointed at the bundled welcome guide).
+
+### GitHub Gist
 
 | Setting | Description |
 |---|---|
 | **Gist ID** | The ID from your Gist URL: `gist.github.com/user/`**`GIST_ID`** |
 | **GitHub Token** | Optional. Required for private Gists; also raises API rate limits for public ones. Create one at [github.com/settings/tokens](https://github.com/settings/tokens) with the `gist` scope. |
+
+### Common
+
+| Setting | Description |
+|---|---|
 | **Poll Interval** | How often to check for updates. Drag the slider between 1 minute and 24 hours. |
 
-Click **Save & Start Polling** to apply. The app resets its cache and polls immediately.
+Click **Save & Start Polling** to apply. The app resets its cache and polls the new source immediately.
 
 ---
 

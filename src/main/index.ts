@@ -1,11 +1,16 @@
-import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain } from 'electron';
+import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, dialog } from 'electron';
 import * as path from 'path';
 import * as https from 'https';
+import * as fs from 'fs';
 import Store from 'electron-store';
 
+type SourceType = 'gist' | 'local';
+
 interface Settings {
+  sourceType: SourceType;
   gistId: string;
   githubToken: string;
+  localFilePath: string;
   pollIntervalMinutes: number;
 }
 
@@ -18,8 +23,10 @@ interface StoreSchema {
 const store = new Store<StoreSchema>({
   defaults: {
     settings: {
+      sourceType: 'local',
       gistId: '',
       githubToken: '',
+      localFilePath: '', // resolved to the bundled welcome file on first run
       pollIntervalMinutes: 30,
     },
     lastEtag: '',
@@ -31,6 +38,10 @@ let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let pollTimer: NodeJS.Timeout | null = null;
 let isQuitting = false;
+
+function welcomeFilePath(): string {
+  return path.join(app.getAppPath(), 'assets/welcome.md');
+}
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -59,6 +70,13 @@ function createWindow(): void {
       console.log(`[preload-error] ${preloadPath}: ${error}`);
     });
   }
+
+  // Run the first check only once the renderer is ready to receive IPC,
+  // otherwise the initial content message would be sent into the void.
+  mainWindow.webContents.once('did-finish-load', () => {
+    resolveDefaultLocalFile();
+    checkForUpdates();
+  });
 
   mainWindow.on('close', (event) => {
     if (!isQuitting) {
@@ -95,6 +113,10 @@ function createTray(): void {
 
 function updateTrayMenu(): void {
   const settings = store.get('settings') as Settings;
+  const sourceLabel =
+    settings.sourceType === 'local'
+      ? `Source: ${settings.localFilePath ? path.basename(settings.localFilePath) : 'local file'}`
+      : `Source: Gist ${settings.gistId || '(none)'}`;
   const menu = Menu.buildFromTemplate([
     {
       label: 'Show DeNoti',
@@ -109,12 +131,16 @@ function updateTrayMenu(): void {
     },
     { type: 'separator' },
     {
+      label: sourceLabel,
+      enabled: false,
+    },
+    {
       label: `Polling every ${settings.pollIntervalMinutes} min`,
       enabled: false,
     },
     {
       label: 'Poll Now',
-      click: () => fetchGist(),
+      click: () => checkForUpdates(),
     },
     { type: 'separator' },
     {
@@ -138,7 +164,80 @@ function showWindow(): void {
   }
 }
 
-function buildContent(gist: Record<string, unknown>): string {
+function sendError(message: string): void {
+  mainWindow?.webContents.send('gist-error', message);
+}
+
+function deliverContent(payload: {
+  content: string;
+  updatedAt: string;
+  description: string;
+  source: string;
+}): void {
+  mainWindow?.webContents.send('gist-content', payload);
+  showWindow();
+  if (!app.isPackaged) {
+    console.log(`[deliver] ${payload.description} (${payload.content.length} chars), visible=${mainWindow?.isVisible()}`);
+  }
+}
+
+/** On first run, point the default local source at the bundled welcome file. */
+function resolveDefaultLocalFile(): void {
+  const settings = store.get('settings') as Settings;
+  if (settings.sourceType === 'local' && !settings.localFilePath) {
+    store.set('settings', { ...settings, localFilePath: welcomeFilePath() });
+    updateTrayMenu();
+  }
+}
+
+function checkForUpdates(): void {
+  const settings = store.get('settings') as Settings;
+  if (settings.sourceType === 'local') {
+    checkLocalFile();
+  } else {
+    fetchGist();
+  }
+}
+
+function checkLocalFile(): void {
+  const settings = store.get('settings') as Settings;
+  const filePath = settings.localFilePath.trim();
+
+  if (!filePath) {
+    sendError('No local file configured. Open Settings to choose a file.');
+    return;
+  }
+
+  let stat: fs.Stats;
+  try {
+    stat = fs.statSync(filePath);
+  } catch {
+    sendError(`File not found: ${filePath}`);
+    return;
+  }
+
+  const newUpdatedAt = String(stat.mtimeMs);
+  const lastUpdatedAt = store.get('lastUpdatedAt') as string;
+  if (newUpdatedAt === lastUpdatedAt) return; // No change since last poll
+
+  let content: string;
+  try {
+    content = fs.readFileSync(filePath, 'utf8');
+  } catch (err) {
+    sendError(`Failed to read file: ${(err as Error).message}`);
+    return;
+  }
+
+  store.set('lastUpdatedAt', newUpdatedAt);
+  deliverContent({
+    content,
+    updatedAt: new Date(stat.mtime).toISOString(),
+    description: path.basename(filePath),
+    source: filePath,
+  });
+}
+
+function buildGistContent(gist: Record<string, unknown>): string {
   const files = Object.values(gist.files as Record<string, Record<string, unknown>>);
   return files
     .map((file) => {
@@ -153,7 +252,7 @@ function fetchGist(): void {
   const settings = store.get('settings') as Settings;
 
   if (!settings.gistId.trim()) {
-    mainWindow?.webContents.send('gist-error', 'No Gist ID configured. Open Settings to get started.');
+    sendError('No Gist ID configured. Open Settings to get started.');
     return;
   }
 
@@ -178,17 +277,17 @@ function fetchGist(): void {
       if (res.statusCode === 304) return; // No change
 
       if (res.statusCode === 404) {
-        mainWindow?.webContents.send('gist-error', 'Gist not found. Check the Gist ID in Settings.');
+        sendError('Gist not found. Check the Gist ID in Settings.');
         return;
       }
 
       if (res.statusCode === 401) {
-        mainWindow?.webContents.send('gist-error', 'Unauthorized. Check your GitHub token in Settings.');
+        sendError('Unauthorized. Check your GitHub token in Settings.');
         return;
       }
 
       if (res.statusCode !== 200) {
-        mainWindow?.webContents.send('gist-error', `GitHub API returned status ${res.statusCode}.`);
+        sendError(`GitHub API returned status ${res.statusCode}.`);
         return;
       }
 
@@ -205,25 +304,22 @@ function fetchGist(): void {
 
           if (newUpdatedAt !== lastUpdatedAt) {
             store.set('lastUpdatedAt', newUpdatedAt);
-            const content = buildContent(gist);
-            mainWindow?.webContents.send('gist-content', {
-              content,
+            deliverContent({
+              content: buildGistContent(gist),
               updatedAt: newUpdatedAt,
-              description: gist.description as string,
-              gistId: settings.gistId,
+              description: (gist.description as string) || `Gist ${settings.gistId}`,
+              source: settings.gistId,
             });
-            // Auto-popup on new content
-            showWindow();
           }
         } catch {
-          mainWindow?.webContents.send('gist-error', 'Failed to parse GitHub response.');
+          sendError('Failed to parse GitHub response.');
         }
       });
     }
   );
 
   req.on('error', (err: Error) => {
-    mainWindow?.webContents.send('gist-error', `Network error: ${err.message}`);
+    sendError(`Network error: ${err.message}`);
   });
 
   req.end();
@@ -233,8 +329,7 @@ function startPolling(): void {
   if (pollTimer) clearInterval(pollTimer);
   const settings = store.get('settings') as Settings;
   const intervalMs = Math.max(1, settings.pollIntervalMinutes) * 60 * 1000;
-  fetchGist();
-  pollTimer = setInterval(fetchGist, intervalMs);
+  pollTimer = setInterval(checkForUpdates, intervalMs);
 }
 
 // IPC
@@ -246,11 +341,25 @@ ipcMain.handle('set-settings', (_event, settings: Settings) => {
   store.set('lastUpdatedAt', '');
   updateTrayMenu();
   startPolling();
+  checkForUpdates(); // Reflect the new source immediately
   return { success: true };
 });
 
 ipcMain.handle('poll-now', () => {
-  fetchGist();
+  checkForUpdates();
+});
+
+ipcMain.handle('pick-file', async () => {
+  if (!mainWindow) return null;
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openFile'],
+    filters: [
+      { name: 'Text & Markdown', extensions: ['md', 'markdown', 'txt'] },
+      { name: 'All Files', extensions: ['*'] },
+    ],
+  });
+  if (result.canceled || result.filePaths.length === 0) return null;
+  return result.filePaths[0];
 });
 
 // Lifecycle
@@ -258,15 +367,6 @@ app.on('ready', () => {
   createWindow();
   createTray();
   startPolling();
-
-  // Show window immediately on first launch so the user can reach Settings
-  const settings = store.get('settings') as Settings;
-  if (!settings.gistId) {
-    mainWindow?.once('ready-to-show', () => {
-      mainWindow?.show();
-      mainWindow?.webContents.send('navigate', 'settings');
-    });
-  }
 });
 
 app.on('before-quit', () => {
