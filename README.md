@@ -55,6 +55,19 @@ npm start
 
 `npm start` compiles the TypeScript and launches Electron. DevTools open automatically in a detached window.
 
+**Build your own distributables:**
+
+```bash
+npm run package           # all platforms in one go (see note below)
+npm run package:mac       # macOS only   → release/*.dmg, *.zip
+npm run package:linux     # Linux only   → release/*.AppImage, *.deb
+npm run package:win       # Windows only → release/*.exe
+```
+
+Artefacts land in the `release/` folder, named `DeNoti-{version}-{os}-{arch}.{ext}`.
+
+> **Cross-platform builds:** running `npm run package` on macOS produces Mac and Linux artefacts natively, but Windows builds require [Wine](https://www.winehq.org/) or a Windows host. Building for macOS on Linux/Windows is not supported by electron-builder. For fully automated multi-platform releases, use a CI service (e.g. GitHub Actions) with separate runners per OS.
+
 ---
 
 ## Using DeNoti with Claude Code Routines
@@ -153,13 +166,3 @@ npm start       # Build + launch with DevTools
 ```
 
 See [docs/architecture.md](docs/architecture.md) for the full technical reference: process model, data model, IPC channels, polling lifecycle, and key invariants.
-
-**Build your own distributable:**
-
-```bash
-npm run package:mac    # macOS  → dist-package/*.dmg
-npm run package:linux  # Linux  → dist-package/*.AppImage
-npm run package:win    # Windows → dist-package/*.exe (NSIS installer)
-```
-
-> Cross-compiling (e.g. building a Windows installer on macOS) requires additional tooling. See the [electron-builder docs](https://www.electron.build/multi-platform-build) for details.
