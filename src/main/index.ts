@@ -13,6 +13,8 @@ function detectContentType(filename: string): ContentType {
   return ext === '.html' || ext === '.htm' ? 'html' : 'markdown';
 }
 
+type PollMode = 'interval' | 'time';
+
 interface Tab {
   id: string;
   name: string;
@@ -20,7 +22,9 @@ interface Tab {
   gistId: string;
   githubToken: string;
   localFilePath: string;
+  pollMode: PollMode;
   pollIntervalMinutes: number;
+  pollTime: string; // "HH:MM" local time, used when pollMode === 'time'
 }
 
 interface TabPollState {
@@ -331,16 +335,39 @@ function fetchGist(tab: Tab): void {
   req.end();
 }
 
+function msUntilTime(timeStr: string): number {
+  const [hours, minutes] = timeStr.split(':').map(Number);
+  const now = new Date();
+  const next = new Date();
+  next.setHours(hours, minutes, 0, 0);
+  if (next <= now) next.setDate(next.getDate() + 1);
+  return next.getTime() - now.getTime();
+}
+
+function scheduleTimeBasedPoll(tabId: string): void {
+  const tab = store.get('tabs').find((t) => t.id === tabId);
+  if (!tab || (tab.pollMode ?? 'interval') !== 'time') return;
+
+  const delay = msUntilTime(tab.pollTime || '09:00');
+  pollTimers.set(tabId, setTimeout(() => {
+    checkTabForUpdates(tabId);
+    scheduleTimeBasedPoll(tabId);
+  }, delay));
+}
+
 function startTabPolling(tabId: string): void {
-  if (pollTimers.has(tabId)) {
-    clearInterval(pollTimers.get(tabId)!);
-    pollTimers.delete(tabId);
-  }
+  const existing = pollTimers.get(tabId);
+  if (existing) { clearTimeout(existing); pollTimers.delete(tabId); }
+
   const tab = store.get('tabs').find((t) => t.id === tabId);
   if (!tab) return;
 
-  const intervalMs = Math.max(1, tab.pollIntervalMinutes) * 60 * 1000;
-  pollTimers.set(tabId, setInterval(() => checkTabForUpdates(tabId), intervalMs));
+  if ((tab.pollMode ?? 'interval') === 'time') {
+    scheduleTimeBasedPoll(tabId);
+  } else {
+    const intervalMs = Math.max(1, tab.pollIntervalMinutes) * 60 * 1000;
+    pollTimers.set(tabId, setInterval(() => checkTabForUpdates(tabId), intervalMs));
+  }
 }
 
 function startAllPolling(): void {
@@ -382,12 +409,16 @@ function initDefaultTabs(): void {
       gistId: '',
       githubToken: '',
       localFilePath: welcomeFilePath(),
+      pollMode: 'interval',
       pollIntervalMinutes: 30,
+      pollTime: '09:00',
     },
   ]);
 }
 
 // IPC
+ipcMain.handle('get-welcome-path', () => welcomeFilePath());
+
 ipcMain.handle('get-tabs', () => store.get('tabs'));
 
 ipcMain.handle('set-tabs', (_event, newTabs: Tab[]) => {
@@ -427,7 +458,11 @@ ipcMain.handle('set-tabs', (_event, newTabs: Tab[]) => {
         store.set('tabStates', states);
         startTabPolling(tab.id);
         checkTabForUpdates(tab.id);
-      } else if (oldTab.pollIntervalMinutes !== tab.pollIntervalMinutes) {
+      } else if (
+        oldTab.pollIntervalMinutes !== tab.pollIntervalMinutes ||
+        (oldTab.pollMode ?? 'interval') !== (tab.pollMode ?? 'interval') ||
+        (oldTab.pollTime ?? '09:00') !== (tab.pollTime ?? '09:00')
+      ) {
         startTabPolling(tab.id);
       }
     }

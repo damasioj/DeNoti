@@ -86,23 +86,41 @@
         </div>
 
         <div class="form-group">
-          <label for="poll-interval">Poll Interval</label>
-          <select id="poll-interval">
-            <option value="1">Every 1 minute</option>
-            <option value="5">Every 5 minutes</option>
-            <option value="30">Every 30 minutes</option>
-            <option value="60">Every 1 hour</option>
-            <option value="360">Every 6 hours</option>
-            <option value="custom">Custom&hellip;</option>
-          </select>
-          <div class="interval-row hidden" id="custom-interval">
-            <input type="number" id="custom-value" min="1" value="15" />
-            <select id="custom-unit">
-              <option value="1">minutes</option>
-              <option value="60">hours</option>
-            </select>
+          <label>Poll Schedule</label>
+          <div class="source-toggle" id="poll-mode-toggle">
+            <button type="button" class="source-btn" data-mode="interval">Interval</button>
+            <button type="button" class="source-btn" data-mode="time">Daily at time</button>
           </div>
-          <small>How often to check for updates.</small>
+        </div>
+
+        <div id="interval-schedule">
+          <div class="form-group">
+            <label for="poll-interval">Interval</label>
+            <select id="poll-interval">
+              <option value="1">Every 1 minute</option>
+              <option value="5">Every 5 minutes</option>
+              <option value="30">Every 30 minutes</option>
+              <option value="60">Every 1 hour</option>
+              <option value="360">Every 6 hours</option>
+              <option value="custom">Custom&hellip;</option>
+            </select>
+            <div class="interval-row hidden" id="custom-interval">
+              <input type="number" id="custom-value" min="1" value="15" />
+              <select id="custom-unit">
+                <option value="1">minutes</option>
+                <option value="60">hours</option>
+              </select>
+            </div>
+            <small>How often to check for updates.</small>
+          </div>
+        </div>
+
+        <div id="time-schedule" class="hidden">
+          <div class="form-group">
+            <label for="poll-time">Time of day</label>
+            <input type="time" id="poll-time" value="09:00" />
+            <small>Polls once per day at this local time.</small>
+          </div>
         </div>
 
         <div class="form-actions">
@@ -129,6 +147,7 @@
     const freshTabIds = new Set(); // tabs with content received since last viewed
     let editingTabId = null;
     let currentSource = 'gist';
+    let currentPollMode = 'interval';
 
     // --- Helpers ---
     function showView(view) {
@@ -274,6 +293,20 @@
       });
     });
 
+    // --- Poll mode toggle ---
+    const pollModeButtons = document.querySelectorAll('#poll-mode-toggle .source-btn');
+
+    function setPollMode(mode) {
+      currentPollMode = mode;
+      pollModeButtons.forEach((btn) => btn.classList.toggle('active', btn.dataset.mode === mode));
+      document.getElementById('interval-schedule').classList.toggle('hidden', mode !== 'interval');
+      document.getElementById('time-schedule').classList.toggle('hidden', mode !== 'time');
+    }
+
+    pollModeButtons.forEach((btn) => {
+      btn.addEventListener('click', () => setPollMode(btn.dataset.mode));
+    });
+
     // --- Poll interval controls ---
     const intervalSelect = document.getElementById('poll-interval');
     const customRow = document.getElementById('custom-interval');
@@ -340,7 +373,7 @@
 
     document.getElementById('cancel-btn').addEventListener('click', () => showView('content'));
 
-    function showTabSettings(tabId) {
+    async function showTabSettings(tabId) {
       editingTabId = tabId;
       const tab = tabId ? tabs.find((t) => t.id === tabId) : null;
 
@@ -348,8 +381,11 @@
       document.getElementById('tab-name').value = tab ? tab.name : '';
       document.getElementById('gist-id').value = tab ? tab.gistId : '';
       document.getElementById('github-token').value = tab ? tab.githubToken : '';
-      document.getElementById('local-path').value = tab ? tab.localFilePath : '';
+      document.getElementById('local-path').value =
+        tab ? tab.localFilePath : await api.getWelcomePath();
       setIntervalControls(tab ? tab.pollIntervalMinutes : 30);
+      setPollMode(tab ? (tab.pollMode ?? 'interval') : 'interval');
+      document.getElementById('poll-time').value = tab ? (tab.pollTime ?? '09:00') : '09:00';
       setSource(tab ? tab.sourceType : 'gist');
 
       document.getElementById('delete-tab-btn').classList.toggle('hidden', !tab);
@@ -370,7 +406,9 @@
         gistId: document.getElementById('gist-id').value.trim(),
         githubToken: document.getElementById('github-token').value.trim(),
         localFilePath: document.getElementById('local-path').value.trim(),
+        pollMode: currentPollMode,
         pollIntervalMinutes: getIntervalMinutes(),
+        pollTime: document.getElementById('poll-time').value || '09:00',
       };
 
       const newTabs = editingTabId
