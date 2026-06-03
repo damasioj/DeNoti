@@ -54,7 +54,7 @@
 
         <div class="form-group">
           <label>Data Source</label>
-          <div class="source-toggle">
+          <div class="source-toggle" id="source-toggle">
             <button type="button" class="source-btn" data-source="local">&#128193; Local File</button>
             <button type="button" class="source-btn" data-source="gist">&#9729; GitHub Gist</button>
           </div>
@@ -344,7 +344,7 @@
     }
 
     // --- Source toggle ---
-    const sourceButtons = document.querySelectorAll('.source-btn');
+    const sourceButtons = document.querySelectorAll('#source-toggle .source-btn');
     const localFields = document.getElementById('local-fields');
     const gistFields = document.getElementById('gist-fields');
 
