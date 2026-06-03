@@ -2,11 +2,20 @@ import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, dialog } from 'el
 import * as path from 'path';
 import * as https from 'https';
 import * as fs from 'fs';
+import { randomUUID } from 'crypto';
 import Store from 'electron-store';
 
 type SourceType = 'gist' | 'local';
+type ContentType = 'markdown' | 'html';
 
-interface Settings {
+function detectContentType(filename: string): ContentType {
+  const ext = path.extname(filename).toLowerCase();
+  return ext === '.html' || ext === '.htm' ? 'html' : 'markdown';
+}
+
+interface Tab {
+  id: string;
+  name: string;
   sourceType: SourceType;
   gistId: string;
   githubToken: string;
@@ -14,29 +23,26 @@ interface Settings {
   pollIntervalMinutes: number;
 }
 
-interface StoreSchema {
-  settings: Settings;
+interface TabPollState {
   lastEtag: string;
   lastUpdatedAt: string;
 }
 
+interface StoreSchema {
+  tabs: Tab[];
+  tabStates: Record<string, TabPollState>;
+}
+
 const store = new Store<StoreSchema>({
   defaults: {
-    settings: {
-      sourceType: 'local',
-      gistId: '',
-      githubToken: '',
-      localFilePath: '', // resolved to the bundled welcome file on first run
-      pollIntervalMinutes: 30,
-    },
-    lastEtag: '',
-    lastUpdatedAt: '',
+    tabs: [],
+    tabStates: {},
   },
 });
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
-let pollTimer: NodeJS.Timeout | null = null;
+const pollTimers = new Map<string, NodeJS.Timeout>();
 let isQuitting = false;
 
 function welcomeFilePath(): string {
@@ -71,11 +77,8 @@ function createWindow(): void {
     });
   }
 
-  // Run the first check only once the renderer is ready to receive IPC,
-  // otherwise the initial content message would be sent into the void.
   mainWindow.webContents.once('did-finish-load', () => {
-    resolveDefaultLocalFile();
-    checkForUpdates();
+    checkAllTabs();
   });
 
   mainWindow.on('close', (event) => {
@@ -90,7 +93,6 @@ function createTray(): void {
   const iconPath = path.join(app.getAppPath(), 'assets/tray-icon.png');
   let icon = nativeImage.createFromPath(iconPath);
   if (icon.isEmpty()) {
-    // Fallback: 1x1 transparent image
     icon = nativeImage.createEmpty();
   }
   if (process.platform === 'darwin') {
@@ -112,16 +114,10 @@ function createTray(): void {
 }
 
 function updateTrayMenu(): void {
-  const settings = store.get('settings') as Settings;
-  const sourceLabel =
-    settings.sourceType === 'local'
-      ? `Source: ${settings.localFilePath ? path.basename(settings.localFilePath) : 'local file'}`
-      : `Source: Gist ${settings.gistId || '(none)'}`;
-  const menu = Menu.buildFromTemplate([
-    {
-      label: 'Show DeNoti',
-      click: () => showWindow(),
-    },
+  const tabs = store.get('tabs');
+
+  const menuItems: Electron.MenuItemConstructorOptions[] = [
+    { label: 'Show DeNoti', click: () => showWindow() },
     {
       label: 'Settings',
       click: () => {
@@ -129,19 +125,24 @@ function updateTrayMenu(): void {
         mainWindow?.webContents.send('navigate', 'settings');
       },
     },
-    { type: 'separator' },
-    {
-      label: sourceLabel,
-      enabled: false,
-    },
-    {
-      label: `Polling every ${settings.pollIntervalMinutes} min`,
-      enabled: false,
-    },
-    {
-      label: 'Poll Now',
-      click: () => checkForUpdates(),
-    },
+  ];
+
+  if (tabs.length > 0) {
+    menuItems.push({ type: 'separator' });
+    if (tabs.length === 1) {
+      menuItems.push({
+        label: `Poll: ${tabs[0].name}`,
+        click: () => checkTabForUpdates(tabs[0].id),
+      });
+    } else {
+      menuItems.push({ label: 'Poll All', click: () => checkAllTabs() });
+      tabs.forEach((tab) => {
+        menuItems.push({ label: `  ${tab.name}`, click: () => checkTabForUpdates(tab.id) });
+      });
+    }
+  }
+
+  menuItems.push(
     { type: 'separator' },
     {
       label: 'Quit DeNoti',
@@ -149,9 +150,10 @@ function updateTrayMenu(): void {
         isQuitting = true;
         app.quit();
       },
-    },
-  ]);
-  tray?.setContextMenu(menu);
+    }
+  );
+
+  tray?.setContextMenu(Menu.buildFromTemplate(menuItems));
 }
 
 function showWindow(): void {
@@ -164,47 +166,48 @@ function showWindow(): void {
   }
 }
 
-function sendError(message: string): void {
-  mainWindow?.webContents.send('gist-error', message);
+function sendError(tabId: string, message: string): void {
+  mainWindow?.webContents.send('tab-error', { tabId, message });
 }
 
-function deliverContent(payload: {
-  content: string;
-  updatedAt: string;
-  description: string;
-  source: string;
-}): void {
-  mainWindow?.webContents.send('gist-content', payload);
+function deliverContent(
+  tabId: string,
+  payload: { content: string; contentType: ContentType; updatedAt: string; description: string; source: string }
+): void {
+  mainWindow?.webContents.send('tab-content', { tabId, ...payload });
   showWindow();
-  if (!app.isPackaged) {
-    console.log(`[deliver] ${payload.description} (${payload.content.length} chars), visible=${mainWindow?.isVisible()}`);
-  }
 }
 
-/** On first run, point the default local source at the bundled welcome file. */
-function resolveDefaultLocalFile(): void {
-  const settings = store.get('settings') as Settings;
-  if (settings.sourceType === 'local' && !settings.localFilePath) {
-    store.set('settings', { ...settings, localFilePath: welcomeFilePath() });
-    updateTrayMenu();
-  }
+function getTabState(tabId: string): TabPollState {
+  const states = store.get('tabStates');
+  return states[tabId] || { lastEtag: '', lastUpdatedAt: '' };
 }
 
-function checkForUpdates(): void {
-  const settings = store.get('settings') as Settings;
-  if (settings.sourceType === 'local') {
-    checkLocalFile();
+function setTabState(tabId: string, updates: Partial<TabPollState>): void {
+  const states = store.get('tabStates');
+  states[tabId] = { ...getTabState(tabId), ...updates };
+  store.set('tabStates', states);
+}
+
+function checkAllTabs(): void {
+  store.get('tabs').forEach((tab) => checkTabForUpdates(tab.id));
+}
+
+function checkTabForUpdates(tabId: string): void {
+  const tab = store.get('tabs').find((t) => t.id === tabId);
+  if (!tab) return;
+  if (tab.sourceType === 'local') {
+    checkLocalFile(tab);
   } else {
-    fetchGist();
+    fetchGist(tab);
   }
 }
 
-function checkLocalFile(): void {
-  const settings = store.get('settings') as Settings;
-  const filePath = settings.localFilePath.trim();
+function checkLocalFile(tab: Tab): void {
+  const filePath = tab.localFilePath.trim();
 
   if (!filePath) {
-    sendError('No local file configured. Open Settings to choose a file.');
+    sendError(tab.id, 'No local file configured. Edit tab settings.');
     return;
   }
 
@@ -212,82 +215,84 @@ function checkLocalFile(): void {
   try {
     stat = fs.statSync(filePath);
   } catch {
-    sendError(`File not found: ${filePath}`);
+    sendError(tab.id, `File not found: ${filePath}`);
     return;
   }
 
   const newUpdatedAt = String(stat.mtimeMs);
-  const lastUpdatedAt = store.get('lastUpdatedAt') as string;
-  if (newUpdatedAt === lastUpdatedAt) return; // No change since last poll
+  if (newUpdatedAt === getTabState(tab.id).lastUpdatedAt) return;
 
   let content: string;
   try {
     content = fs.readFileSync(filePath, 'utf8');
   } catch (err) {
-    sendError(`Failed to read file: ${(err as Error).message}`);
+    sendError(tab.id, `Failed to read file: ${(err as Error).message}`);
     return;
   }
 
-  store.set('lastUpdatedAt', newUpdatedAt);
-  deliverContent({
+  setTabState(tab.id, { lastUpdatedAt: newUpdatedAt });
+  deliverContent(tab.id, {
     content,
+    contentType: detectContentType(filePath),
     updatedAt: new Date(stat.mtime).toISOString(),
     description: path.basename(filePath),
     source: filePath,
   });
 }
 
-function buildGistContent(gist: Record<string, unknown>): string {
+function buildGistContent(gist: Record<string, unknown>): { content: string; contentType: ContentType } {
   const files = Object.values(gist.files as Record<string, Record<string, unknown>>);
-  return files
-    .map((file) => {
-      const filename = file.filename as string;
-      const content = (file.content as string) ?? '';
-      return `# ${filename}\n\n${content}`;
-    })
-    .join('\n\n---\n\n');
+  const allHtml = files.every((f) => detectContentType((f.filename as string) ?? '') === 'html');
+  if (allHtml) {
+    return {
+      content: files.map((f) => (f.content as string) ?? '').join('\n\n'),
+      contentType: 'html',
+    };
+  }
+  return {
+    content: files
+      .map((f) => `# ${f.filename as string}\n\n${(f.content as string) ?? ''}`)
+      .join('\n\n---\n\n'),
+    contentType: 'markdown',
+  };
 }
 
-function fetchGist(): void {
-  const settings = store.get('settings') as Settings;
-
-  if (!settings.gistId.trim()) {
-    sendError('No Gist ID configured. Open Settings to get started.');
+function fetchGist(tab: Tab): void {
+  if (!tab.gistId.trim()) {
+    sendError(tab.id, 'No Gist ID configured. Edit tab settings.');
     return;
   }
 
-  const lastEtag = store.get('lastEtag') as string;
+  const { lastEtag, lastUpdatedAt } = getTabState(tab.id);
 
   const headers: Record<string, string> = {
     'User-Agent': 'DeNoti/0.1.0',
     Accept: 'application/vnd.github+json',
     'X-GitHub-Api-Version': '2022-11-28',
   };
-  if (settings.githubToken) headers['Authorization'] = `Bearer ${settings.githubToken}`;
+  if (tab.githubToken) headers['Authorization'] = `Bearer ${tab.githubToken}`;
   if (lastEtag) headers['If-None-Match'] = lastEtag;
 
   const req = https.request(
     {
       hostname: 'api.github.com',
-      path: `/gists/${settings.gistId.trim()}`,
+      path: `/gists/${tab.gistId.trim()}`,
       method: 'GET',
       headers,
     },
     (res) => {
-      if (res.statusCode === 304) return; // No change
+      if (res.statusCode === 304) return;
 
       if (res.statusCode === 404) {
-        sendError('Gist not found. Check the Gist ID in Settings.');
+        sendError(tab.id, 'Gist not found. Check the Gist ID in settings.');
         return;
       }
-
       if (res.statusCode === 401) {
-        sendError('Unauthorized. Check your GitHub token in Settings.');
+        sendError(tab.id, 'Unauthorized. Check your GitHub token in settings.');
         return;
       }
-
       if (res.statusCode !== 200) {
-        sendError(`GitHub API returned status ${res.statusCode}.`);
+        sendError(tab.id, `GitHub API returned status ${res.statusCode}.`);
         return;
       }
 
@@ -297,56 +302,147 @@ function fetchGist(): void {
       res.on('end', () => {
         try {
           const gist = JSON.parse(body) as Record<string, unknown>;
-          const lastUpdatedAt = store.get('lastUpdatedAt') as string;
           const newUpdatedAt = gist.updated_at as string;
 
-          if (etag) store.set('lastEtag', etag);
+          if (etag) setTabState(tab.id, { lastEtag: etag });
 
           if (newUpdatedAt !== lastUpdatedAt) {
-            store.set('lastUpdatedAt', newUpdatedAt);
-            deliverContent({
-              content: buildGistContent(gist),
+            setTabState(tab.id, { lastUpdatedAt: newUpdatedAt });
+            const { content, contentType } = buildGistContent(gist);
+            deliverContent(tab.id, {
+              content,
+              contentType,
               updatedAt: newUpdatedAt,
-              description: (gist.description as string) || `Gist ${settings.gistId}`,
-              source: settings.gistId,
+              description: (gist.description as string) || `Gist ${tab.gistId}`,
+              source: tab.gistId,
             });
           }
         } catch {
-          sendError('Failed to parse GitHub response.');
+          sendError(tab.id, 'Failed to parse GitHub response.');
         }
       });
     }
   );
 
   req.on('error', (err: Error) => {
-    sendError(`Network error: ${err.message}`);
+    sendError(tab.id, `Network error: ${err.message}`);
   });
 
   req.end();
 }
 
-function startPolling(): void {
-  if (pollTimer) clearInterval(pollTimer);
-  const settings = store.get('settings') as Settings;
-  const intervalMs = Math.max(1, settings.pollIntervalMinutes) * 60 * 1000;
-  pollTimer = setInterval(checkForUpdates, intervalMs);
+function startTabPolling(tabId: string): void {
+  if (pollTimers.has(tabId)) {
+    clearInterval(pollTimers.get(tabId)!);
+    pollTimers.delete(tabId);
+  }
+  const tab = store.get('tabs').find((t) => t.id === tabId);
+  if (!tab) return;
+
+  const intervalMs = Math.max(1, tab.pollIntervalMinutes) * 60 * 1000;
+  pollTimers.set(tabId, setInterval(() => checkTabForUpdates(tabId), intervalMs));
+}
+
+function startAllPolling(): void {
+  for (const timer of pollTimers.values()) clearInterval(timer);
+  pollTimers.clear();
+  store.get('tabs').forEach((tab) => startTabPolling(tab.id));
+}
+
+function initDefaultTabs(): void {
+  if (store.get('tabs').length > 0) return;
+
+  // Migrate from pre-tabs settings format if present
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const oldSettings = (store as any).get('settings') as any;
+  if (oldSettings?.gistId || oldSettings?.localFilePath) {
+    const name =
+      oldSettings.sourceType === 'gist'
+        ? `Gist ${oldSettings.gistId}`.trim()
+        : path.basename(oldSettings.localFilePath || 'Local File');
+    store.set('tabs', [
+      {
+        id: randomUUID(),
+        name,
+        sourceType: oldSettings.sourceType || 'local',
+        gistId: oldSettings.gistId || '',
+        githubToken: oldSettings.githubToken || '',
+        localFilePath: oldSettings.localFilePath || welcomeFilePath(),
+        pollIntervalMinutes: oldSettings.pollIntervalMinutes || 30,
+      },
+    ]);
+    return;
+  }
+
+  store.set('tabs', [
+    {
+      id: randomUUID(),
+      name: 'Welcome',
+      sourceType: 'local',
+      gistId: '',
+      githubToken: '',
+      localFilePath: welcomeFilePath(),
+      pollIntervalMinutes: 30,
+    },
+  ]);
 }
 
 // IPC
-ipcMain.handle('get-settings', () => store.get('settings'));
+ipcMain.handle('get-tabs', () => store.get('tabs'));
 
-ipcMain.handle('set-settings', (_event, settings: Settings) => {
-  store.set('settings', settings);
-  store.set('lastEtag', '');
-  store.set('lastUpdatedAt', '');
+ipcMain.handle('set-tabs', (_event, newTabs: Tab[]) => {
+  const oldTabs = store.get('tabs');
+  const oldById = new Map(oldTabs.map((t) => [t.id, t]));
+  const newById = new Map(newTabs.map((t) => [t.id, t]));
+
+  // Stop polling and clean state for removed tabs
+  for (const oldTab of oldTabs) {
+    if (!newById.has(oldTab.id)) {
+      if (pollTimers.has(oldTab.id)) {
+        clearInterval(pollTimers.get(oldTab.id)!);
+        pollTimers.delete(oldTab.id);
+      }
+      const states = store.get('tabStates');
+      delete states[oldTab.id];
+      store.set('tabStates', states);
+    }
+  }
+
+  store.set('tabs', newTabs);
+
+  for (const tab of newTabs) {
+    const oldTab = oldById.get(tab.id);
+    if (!oldTab) {
+      startTabPolling(tab.id);
+      checkTabForUpdates(tab.id);
+    } else {
+      const sourceChanged =
+        oldTab.sourceType !== tab.sourceType ||
+        oldTab.gistId !== tab.gistId ||
+        oldTab.githubToken !== tab.githubToken ||
+        oldTab.localFilePath !== tab.localFilePath;
+      if (sourceChanged) {
+        const states = store.get('tabStates');
+        delete states[tab.id];
+        store.set('tabStates', states);
+        startTabPolling(tab.id);
+        checkTabForUpdates(tab.id);
+      } else if (oldTab.pollIntervalMinutes !== tab.pollIntervalMinutes) {
+        startTabPolling(tab.id);
+      }
+    }
+  }
+
   updateTrayMenu();
-  startPolling();
-  checkForUpdates(); // Reflect the new source immediately
   return { success: true };
 });
 
-ipcMain.handle('poll-now', () => {
-  checkForUpdates();
+ipcMain.handle('poll-now', (_event, tabId?: string) => {
+  if (tabId) {
+    checkTabForUpdates(tabId);
+  } else {
+    checkAllTabs();
+  }
 });
 
 ipcMain.handle('pick-file', async () => {
@@ -354,7 +450,7 @@ ipcMain.handle('pick-file', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ['openFile'],
     filters: [
-      { name: 'Text & Markdown', extensions: ['md', 'markdown', 'txt'] },
+      { name: 'Text, Markdown & HTML', extensions: ['md', 'markdown', 'txt', 'html', 'htm'] },
       { name: 'All Files', extensions: ['*'] },
     ],
   });
@@ -364,9 +460,10 @@ ipcMain.handle('pick-file', async () => {
 
 // Lifecycle
 app.on('ready', () => {
+  initDefaultTabs();
   createWindow();
   createTray();
-  startPolling();
+  startAllPolling();
 });
 
 app.on('before-quit', () => {

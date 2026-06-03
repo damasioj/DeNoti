@@ -14,24 +14,30 @@
     <header class="header">
       <div class="header-left">
         <span class="logo">DeNoti</span>
-        <span class="subtitle" id="subtitle">GitHub Gist Monitor</span>
+        <span class="subtitle" id="subtitle">Monitor</span>
       </div>
       <div class="header-right">
-        <button class="btn btn-icon" id="poll-btn" title="Poll now">&#8635;</button>
-        <button class="btn btn-icon" id="settings-btn" title="Settings">&#9881;</button>
+        <button class="btn btn-icon" id="poll-btn" title="Poll active tab">&#8635;</button>
+        <button class="btn btn-icon" id="settings-btn" title="Edit tab settings">&#9881;</button>
       </div>
     </header>
 
+    <!-- Tab bar -->
+    <div class="tab-bar" id="tab-bar">
+      <!-- Tab buttons inserted dynamically -->
+      <button class="add-tab-btn" id="add-tab-btn" title="Add tab">+</button>
+    </div>
+
     <!-- Content view -->
     <main class="view" id="content-view">
-      <div class="status-bar" id="status-bar">
+      <div class="status-bar hidden" id="status-bar">
         <span id="status-text">Waiting for data...</span>
         <span id="last-updated"></span>
       </div>
       <div class="content-area" id="content-area">
         <div class="placeholder">
-          <p>&#128203; No data yet.</p>
-          <p>Configure a Gist ID in <a href="#" id="goto-settings">Settings</a> to get started.</p>
+          <p>&#128203; No tabs yet.</p>
+          <p>Click <strong>+</strong> to add a Gist or local file to monitor.</p>
         </div>
       </div>
     </main>
@@ -39,7 +45,12 @@
     <!-- Settings view -->
     <main class="view hidden" id="settings-view">
       <div class="settings-container">
-        <h2>Settings</h2>
+        <h2 id="settings-title">Tab Settings</h2>
+
+        <div class="form-group">
+          <label for="tab-name">Tab Name</label>
+          <input type="text" id="tab-name" placeholder="My Feed" />
+        </div>
 
         <div class="form-group">
           <label>Data Source</label>
@@ -95,8 +106,9 @@
         </div>
 
         <div class="form-actions">
-          <button class="btn btn-primary" id="save-btn">Save &amp; Start Polling</button>
+          <button class="btn btn-primary" id="save-btn">Save</button>
           <button class="btn btn-secondary" id="cancel-btn">Cancel</button>
+          <button class="btn btn-danger hidden" id="delete-tab-btn">Delete Tab</button>
         </div>
 
         <div id="save-status" class="save-status hidden"></div>
@@ -110,55 +122,159 @@
   <script>
   (function () {
     const api = window.api;
-    let currentView = 'content';
 
-    // --- Navigation ---
+    let tabs = [];
+    let activeTabId = null;
+    const tabContents = {};   // { [tabId]: { content, updatedAt, description } }
+    const freshTabIds = new Set(); // tabs with content received since last viewed
+    let editingTabId = null;
+    let currentSource = 'gist';
+
+    // --- Helpers ---
     function showView(view) {
-      currentView = view;
       document.getElementById('content-view').classList.toggle('hidden', view !== 'content');
       document.getElementById('settings-view').classList.toggle('hidden', view !== 'settings');
-      if (view === 'settings') loadSettings();
     }
 
-    document.getElementById('settings-btn').addEventListener('click', () => showView('settings'));
-    document.getElementById('cancel-btn').addEventListener('click', () => showView('content'));
-    document.getElementById('goto-settings').addEventListener('click', (e) => {
-      e.preventDefault();
-      showView('settings');
+    // --- Tab bar ---
+    function renderTabBar() {
+      const tabBar = document.getElementById('tab-bar');
+      tabBar.querySelectorAll('.tab-btn').forEach((el) => el.remove());
+      const addBtn = document.getElementById('add-tab-btn');
+
+      tabs.forEach((tab) => {
+        const btn = document.createElement('button');
+        btn.className = 'tab-btn';
+        if (tab.id === activeTabId) btn.classList.add('active');
+        if (freshTabIds.has(tab.id)) btn.classList.add('has-update');
+        btn.title = 'Double-click to rename';
+        btn.dataset.tabId = tab.id;
+
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = tab.name;
+        btn.appendChild(nameSpan);
+
+        btn.addEventListener('click', () => setActiveTab(tab.id));
+        btn.addEventListener('dblclick', (e) => { e.stopPropagation(); startInlineRename(tab.id, btn, nameSpan); });
+        tabBar.insertBefore(btn, addBtn);
+      });
+    }
+
+    function startInlineRename(tabId, btn, nameSpan) {
+      if (btn.querySelector('.tab-rename-input')) return; // already editing
+      setActiveTab(tabId);
+
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'tab-rename-input';
+      input.value = nameSpan.textContent;
+      nameSpan.replaceWith(input);
+      input.focus();
+      input.select();
+
+      async function commit() {
+        const newName = input.value.trim() || nameSpan.textContent;
+        input.replaceWith(nameSpan);
+        nameSpan.textContent = newName;
+        if (newName === tabs.find((t) => t.id === tabId)?.name) return;
+        const newTabs = tabs.map((t) => t.id === tabId ? { ...t, name: newName } : t);
+        try {
+          await api.setTabs(newTabs);
+          tabs = newTabs;
+          renderActiveContent(); // update subtitle if active
+        } catch {
+          renderTabBar(); // revert on failure
+        }
+      }
+
+      input.addEventListener('blur', commit);
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+        if (e.key === 'Escape') { input.value = nameSpan.textContent; input.blur(); }
+      });
+    }
+
+    function setActiveTab(tabId) {
+      activeTabId = tabId;
+      freshTabIds.delete(tabId);
+      renderTabBar();
+      renderActiveContent();
+    }
+
+    document.getElementById('add-tab-btn').addEventListener('click', () => showTabSettings(null));
+
+    // --- Content display ---
+    function renderActiveContent() {
+      const statusBar = document.getElementById('status-bar');
+      const statusText = document.getElementById('status-text');
+      const lastUpdated = document.getElementById('last-updated');
+      const contentArea = document.getElementById('content-area');
+      const subtitle = document.getElementById('subtitle');
+
+      if (!activeTabId || tabs.length === 0) {
+        subtitle.textContent = 'Monitor';
+        statusBar.classList.add('hidden');
+        contentArea.innerHTML =
+          '<div class="placeholder"><p>&#128203; No tabs yet.</p><p>Click <strong>+</strong> to add a Gist or local file to monitor.</p></div>';
+        return;
+      }
+
+      const data = tabContents[activeTabId];
+      const tab = tabs.find((t) => t.id === activeTabId);
+      statusBar.classList.remove('hidden');
+
+      if (!data) {
+        subtitle.textContent = tab ? tab.name : 'Monitor';
+        statusText.textContent = 'Waiting for data...';
+        lastUpdated.textContent = '';
+        contentArea.innerHTML =
+          '<div class="placeholder"><p>&#128203; No data yet.</p><p>Polling is active.</p></div>';
+        return;
+      }
+
+      const { content, contentType, updatedAt, description } = data;
+      subtitle.textContent = description || (tab ? tab.name : 'Monitor');
+      lastUpdated.textContent = 'Updated ' + new Date(updatedAt).toLocaleString();
+      statusText.textContent = 'Latest report';
+      contentArea.innerHTML = contentType === 'html' ? content : marked.parse(content);
+    }
+
+    api.onTabContent((data) => {
+      const { tabId, content, updatedAt, description } = data;
+      tabContents[tabId] = { content, updatedAt, description };
+      if (tabId === activeTabId) {
+        renderActiveContent();
+      } else {
+        freshTabIds.add(tabId);
+        renderTabBar();
+      }
     });
 
-    api.onNavigate((page) => showView(page));
+    // --- Error display ---
+    api.onTabError(({ tabId, message }) => {
+      const tab = tabs.find((t) => t.id === tabId);
+      const prefix = tab ? `[${tab.name}] ` : '';
+      const toast = document.getElementById('error-toast');
+      toast.textContent = '⚠ ' + prefix + message;
+      toast.classList.remove('hidden');
+      setTimeout(() => toast.classList.add('hidden'), 5000);
+    });
+
+    // --- Navigate from tray ---
+    api.onNavigate((page) => {
+      if (page === 'settings') showTabSettings(activeTabId);
+    });
 
     // --- Poll button ---
     const pollBtn = document.getElementById('poll-btn');
     pollBtn.addEventListener('click', () => {
       pollBtn.classList.add('spinning');
-      api.pollNow().finally(() => {
+      api.pollNow(activeTabId || undefined).finally(() => {
         setTimeout(() => pollBtn.classList.remove('spinning'), 800);
       });
     });
 
-    // --- Content display ---
-    api.onContent((data) => {
-      const { content, updatedAt, description } = data;
-      document.getElementById('subtitle').textContent = description || 'GitHub Gist Monitor';
-      document.getElementById('last-updated').textContent =
-        'Updated ' + new Date(updatedAt).toLocaleString();
-      document.getElementById('status-text').textContent = 'Latest report';
-
-      const area = document.getElementById('content-area');
-      area.innerHTML = marked.parse(content);
-    });
-
-    // --- Error display ---
-    api.onError((message) => {
-      const toast = document.getElementById('error-toast');
-      toast.textContent = '⚠ ' + message;
-      toast.classList.remove('hidden');
-      setTimeout(() => toast.classList.add('hidden'), 5000);
-    });
-
-    // --- Poll interval (dropdown + custom) ---
+    // --- Poll interval controls ---
     const intervalSelect = document.getElementById('poll-interval');
     const customRow = document.getElementById('custom-interval');
     const customValue = document.getElementById('custom-value');
@@ -195,7 +311,6 @@
     }
 
     // --- Source toggle ---
-    let currentSource = 'local';
     const sourceButtons = document.querySelectorAll('.source-btn');
     const localFields = document.getElementById('local-fields');
     const gistFields = document.getElementById('gist-fields');
@@ -218,17 +333,39 @@
       if (picked) document.getElementById('local-path').value = picked;
     });
 
-    async function loadSettings() {
-      const settings = await api.getSettings();
-      document.getElementById('gist-id').value = settings.gistId || '';
-      document.getElementById('github-token').value = settings.githubToken || '';
-      document.getElementById('local-path').value = settings.localFilePath || '';
-      setIntervalControls(settings.pollIntervalMinutes || 30);
-      setSource(settings.sourceType || 'local');
+    // --- Settings panel ---
+    document.getElementById('settings-btn').addEventListener('click', () => {
+      showTabSettings(activeTabId);
+    });
+
+    document.getElementById('cancel-btn').addEventListener('click', () => showView('content'));
+
+    function showTabSettings(tabId) {
+      editingTabId = tabId;
+      const tab = tabId ? tabs.find((t) => t.id === tabId) : null;
+
+      document.getElementById('settings-title').textContent = tab ? 'Edit Tab' : 'New Tab';
+      document.getElementById('tab-name').value = tab ? tab.name : '';
+      document.getElementById('gist-id').value = tab ? tab.gistId : '';
+      document.getElementById('github-token').value = tab ? tab.githubToken : '';
+      document.getElementById('local-path').value = tab ? tab.localFilePath : '';
+      setIntervalControls(tab ? tab.pollIntervalMinutes : 30);
+      setSource(tab ? tab.sourceType : 'gist');
+
+      document.getElementById('delete-tab-btn').classList.toggle('hidden', !tab);
+
+      const saveStatus = document.getElementById('save-status');
+      saveStatus.textContent = '';
+      saveStatus.className = 'save-status hidden';
+
+      showView('settings');
     }
 
     document.getElementById('save-btn').addEventListener('click', async () => {
-      const settings = {
+      const name = document.getElementById('tab-name').value.trim() || 'Tab';
+      const tabData = {
+        id: editingTabId || crypto.randomUUID(),
+        name,
         sourceType: currentSource,
         gistId: document.getElementById('gist-id').value.trim(),
         githubToken: document.getElementById('github-token').value.trim(),
@@ -236,20 +373,59 @@
         pollIntervalMinutes: getIntervalMinutes(),
       };
 
+      const newTabs = editingTabId
+        ? tabs.map((t) => (t.id === editingTabId ? tabData : t))
+        : [...tabs, tabData];
+
       const status = document.getElementById('save-status');
       status.textContent = 'Saving...';
       status.className = 'save-status';
 
       try {
-        await api.setSettings(settings);
-        status.textContent = '✓ Saved. Polling started.';
-        status.className = 'save-status success';
-        setTimeout(() => showView('content'), 1200);
-      } catch (e) {
-        status.textContent = '✗ Failed to save settings.';
+        await api.setTabs(newTabs);
+        tabs = newTabs;
+        if (!editingTabId) activeTabId = tabData.id;
+        renderTabBar();
+        renderActiveContent();
+        showView('content');
+      } catch {
+        status.textContent = '✗ Failed to save.';
         status.className = 'save-status error';
       }
     });
+
+    document.getElementById('delete-tab-btn').addEventListener('click', async () => {
+      if (!editingTabId) return;
+      const removedId = editingTabId;
+      const newTabs = tabs.filter((t) => t.id !== removedId);
+
+      try {
+        await api.setTabs(newTabs);
+        delete tabContents[removedId];
+        freshTabIds.delete(removedId);
+        tabs = newTabs;
+        if (activeTabId === removedId) {
+          activeTabId = newTabs.length > 0 ? newTabs[0].id : null;
+        }
+        renderTabBar();
+        renderActiveContent();
+        showView('content');
+      } catch {
+        const status = document.getElementById('save-status');
+        status.textContent = '✗ Failed to delete tab.';
+        status.className = 'save-status error';
+      }
+    });
+
+    // --- Init ---
+    async function init() {
+      tabs = await api.getTabs();
+      if (tabs.length > 0) activeTabId = tabs[0].id;
+      renderTabBar();
+      renderActiveContent();
+    }
+
+    init();
   })();
   </script>
 </body>

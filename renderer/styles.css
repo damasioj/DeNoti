@@ -118,6 +118,112 @@ html, body {
 
 .btn-secondary:hover { background: var(--accent2); }
 
+.btn-danger {
+  padding: 10px 24px;
+  background: transparent;
+  color: var(--error);
+  border: 1px solid var(--error);
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-family: var(--font);
+  font-size: 14px;
+  font-weight: 600;
+  transition: background 0.15s, color 0.15s;
+  -webkit-app-region: no-drag;
+  pointer-events: all;
+}
+
+.btn-danger:hover { background: var(--error); color: white; }
+
+/* Tab bar */
+.tab-bar {
+  display: flex;
+  align-items: center;
+  padding: 5px 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  gap: 4px;
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+
+.tab-bar::-webkit-scrollbar { height: 3px; }
+.tab-bar::-webkit-scrollbar-track { background: transparent; }
+.tab-bar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+.tab-btn {
+  padding: 5px 14px;
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-family: var(--font);
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  -webkit-app-region: no-drag;
+  pointer-events: all;
+}
+
+.tab-btn:hover {
+  background: var(--surface2);
+  color: var(--text);
+}
+
+.tab-btn.active {
+  background: var(--surface2);
+  color: var(--text);
+  border-color: var(--accent2);
+}
+
+.tab-btn.has-update::after {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  background: var(--accent);
+  border-radius: 50%;
+  margin-left: 6px;
+  vertical-align: middle;
+  position: relative;
+  top: -1px;
+}
+
+.tab-rename-input {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--accent);
+  color: var(--text);
+  font-size: 13px;
+  font-family: var(--font);
+  outline: none;
+  width: 80px;
+  padding: 0 2px;
+}
+
+.add-tab-btn {
+  margin-left: auto;
+  padding: 3px 10px;
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 16px;
+  font-family: var(--font);
+  line-height: 1.4;
+  transition: background 0.15s, color 0.15s;
+  -webkit-app-region: no-drag;
+  pointer-events: all;
+  flex-shrink: 0;
+}
+
+.add-tab-btn:hover {
+  background: var(--surface2);
+  color: var(--text);
+}
+
 /* Views */
 .view {
   flex: 1;

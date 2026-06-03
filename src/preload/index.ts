@@ -1,24 +1,24 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('api', {
-  getSettings: (): Promise<unknown> =>
-    ipcRenderer.invoke('get-settings'),
+  getTabs: (): Promise<unknown> =>
+    ipcRenderer.invoke('get-tabs'),
 
-  setSettings: (settings: unknown): Promise<unknown> =>
-    ipcRenderer.invoke('set-settings', settings),
+  setTabs: (tabs: unknown): Promise<unknown> =>
+    ipcRenderer.invoke('set-tabs', tabs),
 
-  pollNow: (): Promise<void> =>
-    ipcRenderer.invoke('poll-now'),
+  pollNow: (tabId?: string): Promise<void> =>
+    ipcRenderer.invoke('poll-now', tabId),
 
   pickFile: (): Promise<string | null> =>
     ipcRenderer.invoke('pick-file'),
 
-  onContent: (callback: (data: unknown) => void): void => {
-    ipcRenderer.on('gist-content', (_event, data) => callback(data));
+  onTabContent: (callback: (data: unknown) => void): void => {
+    ipcRenderer.on('tab-content', (_event, data) => callback(data));
   },
 
-  onError: (callback: (message: string) => void): void => {
-    ipcRenderer.on('gist-error', (_event, message) => callback(message));
+  onTabError: (callback: (data: unknown) => void): void => {
+    ipcRenderer.on('tab-error', (_event, data) => callback(data));
   },
 
   onNavigate: (callback: (page: string) => void): void => {
