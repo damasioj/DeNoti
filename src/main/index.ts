@@ -260,6 +260,10 @@ app.on('ready', () => {
   }
 });
 
+app.on('before-quit', () => {
+  isQuitting = true;
+});
+
 app.on('window-all-closed', () => {
   // Keep alive in tray on all platforms
 });
