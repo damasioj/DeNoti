@@ -1,6 +1,6 @@
 # DeNoti
 
-A lightweight cross-platform desktop app that monitors a **GitHub Gist** or a **local file** and automatically pops up a window whenever new content is detected.
+A lightweight cross-platform desktop app that monitors **GitHub Gists** and **local files** and automatically pops up a window whenever new content is detected. Each source lives in its own tab with an independent poll schedule.
 
 Supports **macOS**, **Linux**, and **Windows**.
 
@@ -8,20 +8,43 @@ Supports **macOS**, **Linux**, and **Windows**.
 
 ## How It Works
 
-DeNoti runs quietly in your system tray and polls your chosen source at a configurable interval. When the source changes, the app brings itself to the foreground and displays the new content — rendered as Markdown.
-
-On first launch it shows a built-in welcome guide (`assets/welcome.md`) so you have something to see while you configure your own source.
+DeNoti runs quietly in your system tray and polls each configured source on its own schedule. When a source changes, the app brings itself to the foreground and displays the new content — rendered as Markdown or HTML. Close the window to send it back to the tray; it keeps polling in the background.
 
 ---
 
-## Getting Started
+## Installation
 
-### Prerequisites
+There are two ways to install DeNoti: download a pre-built distributable, or run from source. Choose the one that fits your situation.
 
-- [Node.js](https://nodejs.org/) v18 or later
-- npm (bundled with Node.js)
+---
 
-### Install & Run
+### Option A — Install from a distributable (recommended for most users)
+
+No Node.js or build tools required.
+
+1. Go to the [Releases](https://github.com/joshuadamasio/DeNoti/releases) page and download the file for your platform:
+
+   | Platform | File |
+   |---|---|
+   | macOS | `.dmg` |
+   | Linux | `.AppImage` |
+   | Windows | `.exe` (NSIS installer) |
+
+2. **macOS** — Open the `.dmg`, drag **DeNoti** to your Applications folder, then double-click to launch. If macOS blocks the app on first open (Gatekeeper), go to **System Settings → Privacy & Security** and click **Open Anyway**.
+
+3. **Linux** — Make the AppImage executable, then run it:
+   ```bash
+   chmod +x DeNoti-*.AppImage
+   ./DeNoti-*.AppImage
+   ```
+
+4. **Windows** — Run the `.exe` installer and follow the prompts. DeNoti will launch automatically when the installer finishes.
+
+---
+
+### Option B — Run from source (for developers)
+
+**Prerequisites:** [Node.js](https://nodejs.org/) v18 or later (includes npm), Git.
 
 ```bash
 git clone https://github.com/joshuadamasio/DeNoti.git
@@ -30,36 +53,84 @@ npm install
 npm start
 ```
 
-On first launch the window opens automatically showing the welcome guide. After that, no window opens until new content is detected (or you click the tray icon).
+`npm start` compiles the TypeScript and launches Electron. DevTools open automatically in a detached window.
+
+**Build your own distributable:**
+
+```bash
+npm run package:mac    # macOS  → dist-package/*.dmg
+npm run package:linux  # Linux  → dist-package/*.AppImage
+npm run package:win    # Windows → dist-package/*.exe (NSIS installer)
+```
+
+> Cross-compiling (e.g. building a Windows installer on macOS) requires additional tooling. See the [electron-builder docs](https://www.electron.build/multi-platform-build) for details.
 
 ---
 
-## Configuration
+## First-Time Setup
 
-Click the **⚙** button in the app header or open the tray menu → **Settings**, then choose a **Data Source**.
+On first launch, DeNoti opens automatically and shows a built-in **Welcome** tab pointing at the bundled guide. Follow these steps to configure your own sources.
 
-### Local File
+### Step 1 — Set a GitHub Token (optional but recommended)
+
+If you plan to monitor any GitHub Gists, add your token first so all Gist tabs can use it.
+
+1. Click the **⚙** button in the top-right corner to open **Global Settings**
+2. Paste a [GitHub Personal Access Token](https://github.com/settings/tokens) with the **`gist`** scope
+3. Click **Save**
+
+A token is required for private Gists and raises the API rate limit for public ones. You can skip this step if you only need to monitor local files.
+
+### Step 2 — Add a Tab
+
+1. Click **+** in the tab bar to open the **New Tab** form
+2. Give the tab a name (e.g. *Daily Briefing*)
+3. Choose a **Data Source**:
+   - **Local File** — browse to or paste the path of any `.md`, `.html`, or `.txt` file
+   - **GitHub Gist** — paste the Gist ID from the URL: `gist.github.com/user/`**`GIST_ID`**
+4. Choose a **Poll Schedule**:
+   - **Interval** — check every N minutes or hours
+   - **Daily at time** — check once per day at a specific local time
+5. Click **Save**
+
+DeNoti immediately checks the new source and pops up if there is content.
+
+### Step 3 — Manage tabs
+
+| Action | How |
+|---|---|
+| Switch tabs | Click the tab button |
+| Rename a tab | Double-click the tab label |
+| Edit tab settings | Click **✎** in the tab bar (or click the tab first, then **✎**) |
+| Delete a tab | Click **✕** in the tab bar |
+| Add another tab | Click **+** in the tab bar |
+
+---
+
+## Configuration Reference
+
+### Global Settings (⚙ button)
 
 | Setting | Description |
 |---|---|
-| **File Path** | Any text or Markdown file to watch. Click **Browse…** or paste a path. DeNoti pops up when the file's contents change on disk. |
+| **GitHub Token** | Personal Access Token with `gist` scope. Shared by all Gist tabs. |
 
-This is the default source on a fresh install (pointed at the bundled welcome guide).
-
-### GitHub Gist
+### Tab Settings (✎ button)
 
 | Setting | Description |
 |---|---|
-| **Gist ID** | The ID from your Gist URL: `gist.github.com/user/`**`GIST_ID`** |
-| **GitHub Token** | Optional. Required for private Gists; also raises API rate limits for public ones. Create one at [github.com/settings/tokens](https://github.com/settings/tokens) with the `gist` scope. |
+| **Tab Name** | Label shown in the tab bar. Double-click the tab to rename inline. |
+| **Data Source** | Local File or GitHub Gist. |
+| **File Path** | Path to a local `.md`, `.html`, or `.txt` file. |
+| **Gist ID** | The ID segment from your Gist URL. |
+| **Poll Schedule** | Interval (every N minutes/hours) or Daily at a specific local time. |
 
-### Common
+### Content rendering
 
-| Setting | Description |
+| File type | How it's rendered |
 |---|---|
-| **Poll Interval** | How often to check for updates. Pick a preset (1 min, 5 min, 30 min, 1 hr, 6 hr) or choose **Custom…** to enter any number of minutes or hours. |
-
-Click **Save & Start Polling** to apply. The app resets its cache and polls the new source immediately.
+| `.md`, `.markdown`, `.txt` | Parsed as Markdown |
+| `.html`, `.htm` | Rendered as HTML |
 
 ---
 
@@ -67,65 +138,28 @@ Click **Save & Start Polling** to apply. The app resets its cache and polls the 
 
 | Action | Result |
 |---|---|
-| **Left-click** tray icon | Toggle the window |
-| **Right-click** tray icon | Open context menu |
+| **Left-click** icon | Toggle the window |
 | **Show DeNoti** | Bring the window to the front |
-| **Poll Now** | Trigger an immediate check |
-| **Settings** | Open the settings panel |
+| **Settings** | Open Global Settings |
+| **Poll: Tab Name** | Trigger an immediate check for that tab |
+| **Poll All** | Trigger an immediate check for all tabs |
 | **Quit DeNoti** | Exit the app completely |
-
-Closing the window hides it to the tray — the app keeps running and polling in the background.
 
 ---
 
-## Packaging for Distribution
+## Using DeNoti with Claude Code Routines
 
-Build a distributable for your platform:
+DeNoti pairs naturally with [Claude Code Routines](https://claude.ai/code/routines) — scheduled cloud agents that research a topic and write their output to a GitHub Gist. DeNoti polls the Gist and surfaces the report the moment it's updated.
 
-```bash
-npm run package:mac    # macOS → .dmg
-npm run package:linux  # Linux → AppImage
-npm run package:win    # Windows → .exe (NSIS installer)
-```
-
-Output is placed in the `release/` folder.
-
-> Cross-compiling (e.g. building a Windows installer on macOS) requires additional tooling. See [electron-builder docs](https://www.electron.build/multi-platform-build) for details.
+See **[assets/setup-guide.md](assets/setup-guide.md)** for a complete walkthrough: creating the Gist, generating a token, writing the Routine prompt, and wiring it all up in DeNoti.
 
 ---
 
 ## Development
 
 ```bash
-npm run build   # Compile TypeScript once
-npm start       # Build + launch
+npm run build   # Compile TypeScript once (output → dist/)
+npm start       # Build + launch with DevTools
 ```
 
-Source layout:
-
-```
-src/
-  main/index.ts       Main process: polling, tray, window management
-  preload/index.ts    Context bridge between main and renderer
-renderer/
-  index.html          UI: content view + settings panel
-  styles.css          Dark-theme styles
-assets/
-  tray-icon.png       Tray icon (replace to customise)
-```
-
----
-
-## Using DeNoti with Scheduled Briefings
-
-DeNoti was built to display automated reports written to a GitHub Gist by a Claude Code scheduled routine. To wire them together:
-
-1. Create a GitHub Gist (public or private) and note its ID.
-2. In your Claude Code scheduled routine prompt, add a final step:
-   ```
-   Write the full briefing to GitHub Gist ID <YOUR_GIST_ID> using the GitHub API via Bash/curl,
-   replacing the existing content of the file named "briefing.md".
-   ```
-3. Open DeNoti → Settings, paste the Gist ID, and set your poll interval.
-
-Every time the routine runs and updates the Gist, DeNoti will pop up and display the new briefing.
+See [docs/architecture.md](docs/architecture.md) for the full technical reference: process model, data model, IPC channels, polling lifecycle, and key invariants.
