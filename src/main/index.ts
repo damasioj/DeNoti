@@ -52,6 +52,12 @@ function createWindow(): void {
 
   if (!app.isPackaged) {
     mainWindow.webContents.openDevTools({ mode: 'detach' });
+    mainWindow.webContents.on('console-message', (_e, _level, message, line, sourceId) => {
+      console.log(`[renderer] ${message} (${sourceId}:${line})`);
+    });
+    mainWindow.webContents.on('preload-error', (_e, preloadPath, error) => {
+      console.log(`[preload-error] ${preloadPath}: ${error}`);
+    });
   }
 
   mainWindow.on('close', (event) => {
