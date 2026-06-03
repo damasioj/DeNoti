@@ -2,6 +2,8 @@
 
 A lightweight cross-platform **De**sktop **Noti**fier application that monitors **GitHub Gists** and **local files** and automatically pops up whenever new content is received. It supports multiple sources and is easily combined with AI agents making it easy to automate your daily or weekly research habits and receive everything on your desktop!
 
+No need to fiddle around hosting a local LLM, giving access to your machine, or setting up an MCP - just share a resource with your LLM (or friends) and this application will let you know when it gets updated.
+
 Supports **macOS**, **Linux**, and **Windows**.
 
 ---
