@@ -30,7 +30,8 @@
         { "target": "zip", "arch": ["x64", "arm64"] }
       ],
       "category": "public.app-category.productivity",
-      "hardenedRuntime": true
+      "hardenedRuntime": false,
+      "identity": null
     },
     "dmg": {
       "window": { "width": 540, "height": 380 }
