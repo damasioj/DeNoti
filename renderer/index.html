@@ -18,14 +18,18 @@
       </div>
       <div class="header-right">
         <button class="btn btn-icon" id="poll-btn" title="Poll active tab">&#8635;</button>
-        <button class="btn btn-icon" id="settings-btn" title="Edit tab settings">&#9881;</button>
+        <button class="btn btn-icon" id="settings-btn" title="Global settings">&#9881;</button>
       </div>
     </header>
 
     <!-- Tab bar -->
     <div class="tab-bar" id="tab-bar">
-      <!-- Tab buttons inserted dynamically -->
-      <button class="add-tab-btn" id="add-tab-btn" title="Add tab">+</button>
+      <!-- Tab buttons inserted dynamically before #tab-bar-actions -->
+      <div class="tab-bar-actions" id="tab-bar-actions">
+        <button class="tab-action-btn" id="add-tab-btn" title="Add tab">+</button>
+        <button class="tab-action-btn" id="edit-tab-btn" title="Edit tab" disabled>&#9998;</button>
+        <button class="tab-action-btn tab-action-danger" id="delete-tab-btn" title="Delete tab" disabled>&#10005;</button>
+      </div>
     </div>
 
     <!-- Content view -->
@@ -121,18 +125,29 @@
         <div class="form-actions">
           <button class="btn btn-primary" id="save-btn">Save</button>
           <button class="btn btn-secondary" id="cancel-btn">Cancel</button>
-          <button class="btn btn-danger hidden" id="delete-tab-btn">Delete Tab</button>
         </div>
 
         <div id="save-status" class="save-status hidden"></div>
+      </div>
+    </main>
 
-        <hr class="settings-divider" />
+    <!-- Global settings view -->
+    <main class="view hidden" id="global-settings-view">
+      <div class="settings-container">
+        <h2>Global Settings</h2>
 
         <div class="form-group">
-          <label for="global-token">GitHub Token <span class="optional">(global)</span></label>
+          <label for="global-token">GitHub Personal Access Token <span class="optional">(optional)</span></label>
           <input type="password" id="global-token" placeholder="ghp_..." />
           <small>Shared across all Gist tabs. Required for private gists; increases rate limits for public ones.</small>
         </div>
+
+        <div class="form-actions">
+          <button class="btn btn-primary" id="global-save-btn">Save</button>
+          <button class="btn btn-secondary" id="global-cancel-btn">Cancel</button>
+        </div>
+
+        <div id="global-save-status" class="save-status hidden"></div>
       </div>
     </main>
 
@@ -156,13 +171,14 @@
     function showView(view) {
       document.getElementById('content-view').classList.toggle('hidden', view !== 'content');
       document.getElementById('settings-view').classList.toggle('hidden', view !== 'settings');
+      document.getElementById('global-settings-view').classList.toggle('hidden', view !== 'global-settings');
     }
 
     // --- Tab bar ---
     function renderTabBar() {
       const tabBar = document.getElementById('tab-bar');
       tabBar.querySelectorAll('.tab-btn').forEach((el) => el.remove());
-      const addBtn = document.getElementById('add-tab-btn');
+      const actionsDiv = document.getElementById('tab-bar-actions');
 
       tabs.forEach((tab) => {
         const btn = document.createElement('button');
@@ -178,8 +194,14 @@
 
         btn.addEventListener('click', () => setActiveTab(tab.id));
         btn.addEventListener('dblclick', (e) => { e.stopPropagation(); startInlineRename(tab.id, btn, nameSpan); });
-        tabBar.insertBefore(btn, addBtn);
+        tabBar.insertBefore(btn, actionsDiv);
       });
+    }
+
+    function updateTabBarActions() {
+      const hasActive = !!activeTabId;
+      document.getElementById('edit-tab-btn').disabled = !hasActive;
+      document.getElementById('delete-tab-btn').disabled = !hasActive;
     }
 
     function startInlineRename(tabId, btn, nameSpan) {
@@ -221,9 +243,32 @@
       freshTabIds.delete(tabId);
       renderTabBar();
       renderActiveContent();
+      updateTabBarActions();
     }
 
     document.getElementById('add-tab-btn').addEventListener('click', () => showTabSettings(null));
+
+    document.getElementById('edit-tab-btn').addEventListener('click', () => {
+      if (activeTabId) showTabSettings(activeTabId);
+    });
+
+    document.getElementById('delete-tab-btn').addEventListener('click', async () => {
+      if (!activeTabId) return;
+      const removedId = activeTabId;
+      const newTabs = tabs.filter((t) => t.id !== removedId);
+      try {
+        await api.setTabs(newTabs);
+        delete tabContents[removedId];
+        freshTabIds.delete(removedId);
+        tabs = newTabs;
+        activeTabId = newTabs.length > 0 ? newTabs[0].id : null;
+        renderTabBar();
+        renderActiveContent();
+        updateTabBarActions();
+      } catch {
+        // silently ignore — tab stays
+      }
+    });
 
     // --- Content display ---
     function renderActiveContent() {
@@ -284,7 +329,7 @@
 
     // --- Navigate from tray ---
     api.onNavigate((page) => {
-      if (page === 'settings') showTabSettings(activeTabId);
+      if (page === 'settings') showGlobalSettings();
     });
 
     // --- Poll button ---
@@ -369,11 +414,7 @@
       if (picked) document.getElementById('local-path').value = picked;
     });
 
-    // --- Settings panel ---
-    document.getElementById('settings-btn').addEventListener('click', () => {
-      showTabSettings(activeTabId);
-    });
-
+    // --- Tab settings panel ---
     document.getElementById('cancel-btn').addEventListener('click', () => showView('content'));
 
     async function showTabSettings(tabId) {
@@ -390,17 +431,41 @@
       document.getElementById('poll-time').value = tab ? (tab.pollTime ?? '09:00') : '09:00';
       setSource(tab ? tab.sourceType : 'gist');
 
-      document.getElementById('delete-tab-btn').classList.toggle('hidden', !tab);
-
       const saveStatus = document.getElementById('save-status');
       saveStatus.textContent = '';
       saveStatus.className = 'save-status hidden';
 
-      const config = await api.getConfig();
-      document.getElementById('global-token').value = config.githubToken || '';
-
       showView('settings');
     }
+
+    // --- Global settings panel ---
+    document.getElementById('settings-btn').addEventListener('click', () => showGlobalSettings());
+
+    async function showGlobalSettings() {
+      const config = await api.getConfig();
+      document.getElementById('global-token').value = config.githubToken || '';
+      const status = document.getElementById('global-save-status');
+      status.textContent = '';
+      status.className = 'save-status hidden';
+      showView('global-settings');
+    }
+
+    document.getElementById('global-cancel-btn').addEventListener('click', () => showView('content'));
+
+    document.getElementById('global-save-btn').addEventListener('click', async () => {
+      const status = document.getElementById('global-save-status');
+      status.textContent = 'Saving...';
+      status.className = 'save-status';
+      try {
+        await api.setConfig({ githubToken: document.getElementById('global-token').value.trim() });
+        status.textContent = '✓ Saved.';
+        status.className = 'save-status success';
+        setTimeout(() => showView('content'), 1000);
+      } catch {
+        status.textContent = '✗ Failed to save.';
+        status.className = 'save-status error';
+      }
+    });
 
     document.getElementById('save-btn').addEventListener('click', async () => {
       const name = document.getElementById('tab-name').value.trim() || 'Tab';
@@ -424,38 +489,15 @@
       status.className = 'save-status';
 
       try {
-        await api.setConfig({ githubToken: document.getElementById('global-token').value.trim() });
         await api.setTabs(newTabs);
         tabs = newTabs;
         if (!editingTabId) activeTabId = tabData.id;
         renderTabBar();
         renderActiveContent();
+        updateTabBarActions();
         showView('content');
       } catch {
         status.textContent = '✗ Failed to save.';
-        status.className = 'save-status error';
-      }
-    });
-
-    document.getElementById('delete-tab-btn').addEventListener('click', async () => {
-      if (!editingTabId) return;
-      const removedId = editingTabId;
-      const newTabs = tabs.filter((t) => t.id !== removedId);
-
-      try {
-        await api.setTabs(newTabs);
-        delete tabContents[removedId];
-        freshTabIds.delete(removedId);
-        tabs = newTabs;
-        if (activeTabId === removedId) {
-          activeTabId = newTabs.length > 0 ? newTabs[0].id : null;
-        }
-        renderTabBar();
-        renderActiveContent();
-        showView('content');
-      } catch {
-        const status = document.getElementById('save-status');
-        status.textContent = '✗ Failed to delete tab.';
         status.className = 'save-status error';
       }
     });
@@ -466,6 +508,7 @@
       if (tabs.length > 0) activeTabId = tabs[0].id;
       renderTabBar();
       renderActiveContent();
+      updateTabBarActions();
     }
 
     init();

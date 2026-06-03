@@ -202,26 +202,43 @@ html, body {
   padding: 0 2px;
 }
 
-.add-tab-btn {
+.tab-bar-actions {
   margin-left: auto;
-  padding: 3px 10px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.tab-action-btn {
+  padding: 3px 9px;
   background: transparent;
   color: var(--text-dim);
   border: 1px solid var(--border);
   border-radius: 6px;
   cursor: pointer;
-  font-size: 16px;
+  font-size: 14px;
   font-family: var(--font);
   line-height: 1.4;
-  transition: background 0.15s, color 0.15s;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
   -webkit-app-region: no-drag;
   pointer-events: all;
-  flex-shrink: 0;
 }
 
-.add-tab-btn:hover {
+.tab-action-btn:hover:not(:disabled) {
   background: var(--surface2);
   color: var(--text);
+}
+
+.tab-action-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.tab-action-btn.tab-action-danger:hover:not(:disabled) {
+  background: var(--error);
+  border-color: var(--error);
+  color: white;
 }
 
 /* Views */
