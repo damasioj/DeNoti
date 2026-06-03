@@ -76,11 +76,22 @@
 
         <div class="form-group">
           <label for="poll-interval">Poll Interval</label>
-          <div class="interval-row">
-            <input type="range" id="poll-interval" min="1" max="1440" step="1" value="30" />
-            <span id="interval-display">30 min</span>
+          <select id="poll-interval">
+            <option value="1">Every 1 minute</option>
+            <option value="5">Every 5 minutes</option>
+            <option value="30">Every 30 minutes</option>
+            <option value="60">Every 1 hour</option>
+            <option value="360">Every 6 hours</option>
+            <option value="custom">Custom&hellip;</option>
+          </select>
+          <div class="interval-row hidden" id="custom-interval">
+            <input type="number" id="custom-value" min="1" value="15" />
+            <select id="custom-unit">
+              <option value="1">minutes</option>
+              <option value="60">hours</option>
+            </select>
           </div>
-          <small>How often to check for updates (1 min – 24 h).</small>
+          <small>How often to check for updates.</small>
         </div>
 
         <div class="form-actions">
@@ -147,20 +158,41 @@
       setTimeout(() => toast.classList.add('hidden'), 5000);
     });
 
-    // --- Settings ---
-    const intervalInput = document.getElementById('poll-interval');
-    const intervalDisplay = document.getElementById('interval-display');
+    // --- Poll interval (dropdown + custom) ---
+    const intervalSelect = document.getElementById('poll-interval');
+    const customRow = document.getElementById('custom-interval');
+    const customValue = document.getElementById('custom-value');
+    const customUnit = document.getElementById('custom-unit');
+    const PRESETS = ['1', '5', '30', '60', '360'];
 
-    function formatInterval(minutes) {
-      if (minutes < 60) return minutes + ' min';
-      const h = Math.floor(minutes / 60);
-      const m = minutes % 60;
-      return m ? h + ' h ' + m + ' min' : h + ' h';
+    intervalSelect.addEventListener('change', () => {
+      customRow.classList.toggle('hidden', intervalSelect.value !== 'custom');
+    });
+
+    function setIntervalControls(minutes) {
+      if (PRESETS.includes(String(minutes))) {
+        intervalSelect.value = String(minutes);
+        customRow.classList.add('hidden');
+      } else {
+        intervalSelect.value = 'custom';
+        customRow.classList.remove('hidden');
+        if (minutes % 60 === 0) {
+          customValue.value = minutes / 60;
+          customUnit.value = '60';
+        } else {
+          customValue.value = minutes;
+          customUnit.value = '1';
+        }
+      }
     }
 
-    intervalInput.addEventListener('input', () => {
-      intervalDisplay.textContent = formatInterval(parseInt(intervalInput.value));
-    });
+    function getIntervalMinutes() {
+      if (intervalSelect.value === 'custom') {
+        const n = Math.max(1, parseInt(customValue.value) || 1);
+        return n * parseInt(customUnit.value);
+      }
+      return parseInt(intervalSelect.value);
+    }
 
     // --- Source toggle ---
     let currentSource = 'local';
@@ -191,8 +223,7 @@
       document.getElementById('gist-id').value = settings.gistId || '';
       document.getElementById('github-token').value = settings.githubToken || '';
       document.getElementById('local-path').value = settings.localFilePath || '';
-      intervalInput.value = settings.pollIntervalMinutes || 30;
-      intervalDisplay.textContent = formatInterval(parseInt(intervalInput.value));
+      setIntervalControls(settings.pollIntervalMinutes || 30);
       setSource(settings.sourceType || 'local');
     }
 
@@ -202,7 +233,7 @@
         gistId: document.getElementById('gist-id').value.trim(),
         githubToken: document.getElementById('github-token').value.trim(),
         localFilePath: document.getElementById('local-path').value.trim(),
-        pollIntervalMinutes: parseInt(intervalInput.value),
+        pollIntervalMinutes: getIntervalMinutes(),
       };
 
       const status = document.getElementById('save-status');

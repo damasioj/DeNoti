@@ -57,7 +57,7 @@ This is the default source on a fresh install (pointed at the bundled welcome gu
 
 | Setting | Description |
 |---|---|
-| **Poll Interval** | How often to check for updates. Drag the slider between 1 minute and 24 hours. |
+| **Poll Interval** | How often to check for updates. Pick a preset (1 min, 5 min, 30 min, 1 hr, 6 hr) or choose **Custom…** to enter any number of minutes or hours. |
 
 Click **Save & Start Polling** to apply. The app resets its cache and polls the new source immediately.
 

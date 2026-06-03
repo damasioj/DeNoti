@@ -270,7 +270,9 @@ html, body {
 }
 
 .form-group input[type="text"],
-.form-group input[type="password"] {
+.form-group input[type="password"],
+.form-group input[type="number"],
+.form-group select {
   width: 100%;
   padding: 10px 14px;
   background: var(--surface);
@@ -283,8 +285,28 @@ html, body {
   transition: border-color 0.15s;
 }
 
-.form-group input:focus {
+.form-group select {
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.form-group input:focus,
+.form-group select:focus {
   border-color: var(--accent);
+}
+
+#custom-interval {
+  margin-top: 12px;
+}
+
+#custom-interval input[type="number"] {
+  flex: 1;
+  width: auto;
+}
+
+#custom-interval select {
+  flex: 0 0 130px;
+  width: 130px;
 }
 
 .form-group small {
