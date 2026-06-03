@@ -61,7 +61,6 @@ interface Tab {
   name: string;                 // display label shown in the tab bar
   sourceType: 'gist' | 'local';
   gistId: string;
-  githubToken: string;          // optional; empty string if not provided
   localFilePath: string;
   pollIntervalMinutes: number;
 }
