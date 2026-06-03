@@ -2,6 +2,10 @@
   "name": "denoti",
   "version": "0.1.0",
   "description": "Poll GitHub Gists and display updates as a desktop notification window",
+  "author": {
+    "name": "Joshua Damasio",
+    "email": "joshua.damasio@gmail.com"
+  },
   "main": "dist/main/index.js",
   "scripts": {
     "build": "tsc",
@@ -20,7 +24,8 @@
       "output": "release"
     },
     "files": [
-      "dist/**/*",
+      "dist/main/**/*",
+      "dist/preload/**/*",
       "renderer/**/*",
       "assets/**/*"
     ],
@@ -45,7 +50,7 @@
     },
     "win": {
       "target": [
-        { "target": "nsis", "arch": ["x64", "arm64"] }
+        { "target": "nsis", "arch": ["x64"] }
       ]
     },
     "nsis": {
