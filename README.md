@@ -67,6 +67,14 @@ npm run package:win    # Windows → dist-package/*.exe (NSIS installer)
 
 ---
 
+## Using DeNoti with Claude Code Routines
+
+DeNoti pairs naturally with [Claude Code Routines](https://claude.ai/code/routines) — scheduled cloud agents that research a topic and write their output to a GitHub Gist. DeNoti polls the Gist and surfaces the report the moment it's updated.
+
+See **[assets/setup-guide.md](assets/setup-guide.md)** for a complete walkthrough: creating the Gist, generating a token, writing the Routine prompt, and wiring it all up in DeNoti.
+
+---
+
 ## First-Time Setup
 
 On first launch, DeNoti opens automatically and shows a built-in **Welcome** tab pointing at the bundled guide. Follow these steps to configure your own sources.
@@ -144,14 +152,6 @@ DeNoti immediately checks the new source and pops up if there is content.
 | **Poll: Tab Name** | Trigger an immediate check for that tab |
 | **Poll All** | Trigger an immediate check for all tabs |
 | **Quit DeNoti** | Exit the app completely |
-
----
-
-## Using DeNoti with Claude Code Routines
-
-DeNoti pairs naturally with [Claude Code Routines](https://claude.ai/code/routines) — scheduled cloud agents that research a topic and write their output to a GitHub Gist. DeNoti polls the Gist and surfaces the report the moment it's updated.
-
-See **[assets/setup-guide.md](assets/setup-guide.md)** for a complete walkthrough: creating the Gist, generating a token, writing the Routine prompt, and wiring it all up in DeNoti.
 
 ---
 
