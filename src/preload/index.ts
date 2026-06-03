@@ -1,6 +1,9 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('api', {
+  getWelcomePath: (): Promise<string> =>
+    ipcRenderer.invoke('get-welcome-path'),
+
   getTabs: (): Promise<unknown> =>
     ipcRenderer.invoke('get-tabs'),
 
