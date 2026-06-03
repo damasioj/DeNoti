@@ -10,19 +10,17 @@ Supports **macOS**, **Linux**, and **Windows**.
 
 ## How It Works
 
-DeNoti runs quietly in your system tray and polls each configured source on its own schedule. When a source changes, the app brings itself to the foreground and displays the new content — rendered as Markdown or HTML. Close the window to send it back to the tray; it keeps polling in the background.
+DeNoti runs quietly in your system tray and polls each configured source on its own schedule. When a source changes, the app pops up and displays the new content — rendered as Markdown or HTML. Close the window to send it back to the tray; it keeps polling in the background.
 
 ---
 
 ## Installation
 
-There are two ways to install DeNoti: download a pre-built distributable, or run from source. Choose the one that fits your situation.
+There are two ways to install DeNoti: download from the [Releases page](https://github.com/damasioj/DeNoti/releases), or run from source.
 
 ---
 
 ### Option A — Install from a distributable (recommended for most users)
-
-No Node.js or build tools required.
 
 1. Go to the [Releases](https://github.com/joshuadamasio/DeNoti/releases) page and download the file for your platform:
 
