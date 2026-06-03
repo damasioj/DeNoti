@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src https://api.github.com" />
+  <title>DeNoti</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/marked@9/marked.min.js"></script>
+</head>
+<body>
+  <div class="app">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-left">
+        <span class="logo">DeNoti</span>
+        <span class="subtitle" id="subtitle">GitHub Gist Monitor</span>
+      </div>
+      <div class="header-right">
+        <button class="btn btn-icon" id="poll-btn" title="Poll now">&#8635;</button>
+        <button class="btn btn-icon" id="settings-btn" title="Settings">&#9881;</button>
+      </div>
+    </header>
+
+    <!-- Content view -->
+    <main class="view" id="content-view">
+      <div class="status-bar" id="status-bar">
+        <span id="status-text">Waiting for data...</span>
+        <span id="last-updated"></span>
+      </div>
+      <div class="content-area" id="content-area">
+        <div class="placeholder">
+          <p>&#128203; No data yet.</p>
+          <p>Configure a Gist ID in <a href="#" id="goto-settings">Settings</a> to get started.</p>
+        </div>
+      </div>
+    </main>
+
+    <!-- Settings view -->
+    <main class="view hidden" id="settings-view">
+      <div class="settings-container">
+        <h2>Settings</h2>
+
+        <div class="form-group">
+          <label for="gist-id">GitHub Gist ID</label>
+          <input type="text" id="gist-id" placeholder="e.g. abc123def456..." />
+          <small>The ID from your Gist URL: gist.github.com/user/<strong>GIST_ID</strong></small>
+        </div>
+
+        <div class="form-group">
+          <label for="github-token">GitHub Personal Access Token <span class="optional">(optional)</span></label>
+          <input type="password" id="github-token" placeholder="ghp_..." />
+          <small>Required for private gists. Increases API rate limit for public gists.</small>
+        </div>
+
+        <div class="form-group">
+          <label for="poll-interval">Poll Interval</label>
+          <div class="interval-row">
+            <input type="range" id="poll-interval" min="1" max="1440" step="1" value="30" />
+            <span id="interval-display">30 min</span>
+          </div>
+          <small>How often to check for updates (1 min – 24 h).</small>
+        </div>
+
+        <div class="form-actions">
+          <button class="btn btn-primary" id="save-btn">Save &amp; Start Polling</button>
+          <button class="btn btn-secondary" id="cancel-btn">Cancel</button>
+        </div>
+
+        <div id="save-status" class="save-status hidden"></div>
+      </div>
+    </main>
+
+    <!-- Error toast -->
+    <div class="toast hidden" id="error-toast"></div>
+  </div>
+
+  <script>
+    const api = window.api;
+    let currentView = 'content';
+
+    // --- Navigation ---
+    function showView(view) {
+      currentView = view;
+      document.getElementById('content-view').classList.toggle('hidden', view !== 'content');
+      document.getElementById('settings-view').classList.toggle('hidden', view !== 'settings');
+      if (view === 'settings') loadSettings();
+    }
+
+    document.getElementById('settings-btn').addEventListener('click', () => showView('settings'));
+    document.getElementById('cancel-btn').addEventListener('click', () => showView('content'));
+    document.getElementById('goto-settings').addEventListener('click', (e) => {
+      e.preventDefault();
+      showView('settings');
+    });
+
+    api.onNavigate((page) => showView(page));
+
+    // --- Poll button ---
+    const pollBtn = document.getElementById('poll-btn');
+    pollBtn.addEventListener('click', () => {
+      pollBtn.classList.add('spinning');
+      api.pollNow().finally(() => {
+        setTimeout(() => pollBtn.classList.remove('spinning'), 800);
+      });
+    });
+
+    // --- Content display ---
+    api.onContent((data) => {
+      const { content, updatedAt, description } = data;
+      document.getElementById('subtitle').textContent = description || 'GitHub Gist Monitor';
+      document.getElementById('last-updated').textContent =
+        'Updated ' + new Date(updatedAt).toLocaleString();
+      document.getElementById('status-text').textContent = 'Latest report';
+
+      const area = document.getElementById('content-area');
+      area.innerHTML = marked.parse(content);
+    });
+
+    // --- Error display ---
+    api.onError((message) => {
+      const toast = document.getElementById('error-toast');
+      toast.textContent = '⚠ ' + message;
+      toast.classList.remove('hidden');
+      setTimeout(() => toast.classList.add('hidden'), 5000);
+    });
+
+    // --- Settings ---
+    const intervalInput = document.getElementById('poll-interval');
+    const intervalDisplay = document.getElementById('interval-display');
+
+    function formatInterval(minutes) {
+      if (minutes < 60) return minutes + ' min';
+      const h = Math.floor(minutes / 60);
+      const m = minutes % 60;
+      return m ? h + ' h ' + m + ' min' : h + ' h';
+    }
+
+    intervalInput.addEventListener('input', () => {
+      intervalDisplay.textContent = formatInterval(parseInt(intervalInput.value));
+    });
+
+    async function loadSettings() {
+      const settings = await api.getSettings();
+      document.getElementById('gist-id').value = settings.gistId || '';
+      document.getElementById('github-token').value = settings.githubToken || '';
+      intervalInput.value = settings.pollIntervalMinutes || 30;
+      intervalDisplay.textContent = formatInterval(parseInt(intervalInput.value));
+    }
+
+    document.getElementById('save-btn').addEventListener('click', async () => {
+      const settings = {
+        gistId: document.getElementById('gist-id').value.trim(),
+        githubToken: document.getElementById('github-token').value.trim(),
+        pollIntervalMinutes: parseInt(intervalInput.value),
+      };
+
+      const status = document.getElementById('save-status');
+      status.textContent = 'Saving...';
+      status.className = 'save-status';
+
+      try {
+        await api.setSettings(settings);
+        status.textContent = '✓ Saved. Polling started.';
+        status.className = 'save-status success';
+        setTimeout(() => showView('content'), 1200);
+      } catch (e) {
+        status.textContent = '✗ Failed to save settings.';
+        status.className = 'save-status error';
+      }
+    });
+  </script>
+</body>
+</html>
