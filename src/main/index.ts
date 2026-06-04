@@ -32,6 +32,7 @@ interface TabPollState {
 }
 
 interface AppConfig {
+  githubToken: string;
   pollOnStartup: boolean;
   pollOnWake: boolean;
 }
@@ -46,7 +47,7 @@ const store = new Store<StoreSchema>({
   defaults: {
     tabs: [],
     tabStates: {},
-    config: { pollOnStartup: true, pollOnWake: true },
+    config: { githubToken: '', pollOnStartup: true, pollOnWake: true },
   },
 });
 
@@ -274,12 +275,14 @@ function fetchGist(tab: Tab): void {
   }
 
   const { lastEtag, lastUpdatedAt } = getTabState(tab.id);
+  const { githubToken } = store.get('config');
 
   const headers: Record<string, string> = {
     'User-Agent': 'DeNoti/0.1.0',
     Accept: 'application/vnd.github+json',
     'X-GitHub-Api-Version': '2022-11-28',
   };
+  if (githubToken) headers['Authorization'] = `Bearer ${githubToken}`;
   if (lastEtag) headers['If-None-Match'] = lastEtag;
 
   const req = https.request(
@@ -294,6 +297,10 @@ function fetchGist(tab: Tab): void {
 
       if (res.statusCode === 404) {
         sendError(tab.id, 'Gist not found. Check the Gist ID in settings.');
+        return;
+      }
+      if (res.statusCode === 401) {
+        sendError(tab.id, 'Unauthorized. Check your GitHub token in settings.');
         return;
       }
       if (res.statusCode !== 200) {
@@ -384,6 +391,9 @@ function initDefaultTabs(): void {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const oldSettings = (store as any).get('settings') as any;
   if (oldSettings?.gistId || oldSettings?.localFilePath) {
+    if (oldSettings.githubToken) {
+      store.set('config', { githubToken: oldSettings.githubToken });
+    }
     const name =
       oldSettings.sourceType === 'gist'
         ? `Gist ${oldSettings.gistId}`.trim()
@@ -424,6 +434,14 @@ ipcMain.handle('get-config', () => store.get('config'));
 
 ipcMain.handle('set-config', (_event, config: AppConfig) => {
   store.set('config', config);
+  // Clear etag cache for all gist tabs so they re-fetch with the updated token
+  const states = store.get('tabStates');
+  for (const tab of store.get('tabs')) {
+    if (tab.sourceType === 'gist' && states[tab.id]) {
+      states[tab.id] = { ...states[tab.id], lastEtag: '' };
+    }
+  }
+  store.set('tabStates', states);
   return { success: true };
 });
 

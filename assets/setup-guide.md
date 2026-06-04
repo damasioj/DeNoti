@@ -40,7 +40,20 @@ Keep this tab open — you'll need the Gist ID in the next steps.
 
 ---
 
-## Step 2 — Set Up a Claude Code Routine
+## Step 2 — Create a GitHub Personal Access Token
+
+Both DeNoti (for reading) and the Claude Routine (for writing) need a token with the `gist` scope.
+
+1. Go to [github.com/settings/tokens/new](https://github.com/settings/tokens/new)
+2. Give it a descriptive name (e.g. *DeNoti + Routines*)
+3. Under **Select scopes**, check **`gist`** only
+4. Click **Generate token** and copy it immediately — GitHub won't show it again
+
+> You can use a single token for both DeNoti and the Routine, or generate separate ones.
+
+---
+
+## Step 3 — Set Up a Claude Code Routine
 
 Claude Code Routines run scheduled agents in Anthropic's cloud. The agent will do the research and write its output to your Gist.
 
@@ -119,14 +132,15 @@ Review the summary Claude Code shows you, then confirm. Your routine is now live
 
 ---
 
-## Step 3 — Configure DeNoti
+## Step 4 — Configure DeNoti
 
 1. Open DeNoti and click **+** in the tab bar to add a new tab
 2. Give the tab a name (e.g. *Daily Briefing*)
 3. Select **GitHub Gist** as the data source
 4. Paste your **Gist ID** into the Gist ID field
-5. Set the **Poll Interval** to how often you want DeNoti to check — matching or slightly shorter than your routine's schedule works well (e.g. every 30 minutes for a daily routine)
-6. Click **Save**
+5. Paste your **GitHub token** into the token field
+6. Set the **Poll Interval** to how often you want DeNoti to check — matching or slightly shorter than your routine's schedule works well (e.g. every 30 minutes for a daily routine)
+7. Click **Save**
 
 DeNoti immediately polls the Gist and will pop up as soon as new content is detected.
 
@@ -147,6 +161,7 @@ Each DeNoti tab is independent, so you can monitor several Gists at once:
 | Symptom | Likely cause | Fix |
 |---|---|---|
 | DeNoti shows *Gist not found* | Wrong Gist ID | Copy the ID from the Gist URL and re-enter it in tab settings |
-| Routine runs but Gist doesn't update | Wrong Gist ID in the routine prompt | Edit the routine at claude.ai/code/routines and correct the Gist ID |
+| DeNoti shows *Unauthorized* | Invalid or expired token | Generate a new token at github.com/settings/tokens |
+| Routine runs but Gist doesn't update | Wrong Gist ID or token in the routine prompt | Edit the routine at claude.ai/code/routines and correct the values |
 | Content looks like raw HTML tags | File extension is `.md` but content is HTML | Rename the Gist file to `.html` or adjust the routine prompt |
 | DeNoti doesn't pop up | Poll interval is long | Click ⟳ to poll immediately, or shorten the interval in tab settings |

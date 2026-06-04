@@ -20,6 +20,7 @@ Point DeNoti at any text or Markdown file on your computer. DeNoti checks the fi
 Point DeNoti at a GitHub Gist by its ID. DeNoti polls the Gist and pops up when it's updated.
 
 - **Gist ID** — the part after your username in the URL: `gist.github.com/you/`**`GIST_ID`**
+- **Token** *(optional)* — a [personal access token](https://github.com/settings/tokens) with the `gist` scope. Required for private gists; also raises the API rate limit for public ones.
 
 ---
 
@@ -48,6 +49,6 @@ Closing the window just hides it to the tray — DeNoti keeps polling in the bac
 
 DeNoti was designed as a companion for scheduled reports. Have a cron job, a CI pipeline, or a Claude Code routine write its output to a Gist (or a local/synced file), then point DeNoti at it. Each time the report updates, DeNoti surfaces it for you — no inbox required.
 
-For a full walkthrough — creating a Gist, writing a Claude Code Routine that posts its output to that Gist, and wiring it all up in DeNoti — see **`assets/setup-guide.md`** in the application folder.
+For a full walkthrough — creating a Gist, generating a GitHub token, writing a Claude Code Routine that posts its output to that Gist, and wiring it all up in DeNoti — see **`assets/setup-guide.md`** in the application folder.
 
 **Ready?** Open **Settings** and choose your source. 🚀
