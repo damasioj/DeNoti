@@ -68,6 +68,7 @@ function createWindow(): void {
     minWidth: 600,
     minHeight: 400,
     show: false,
+    icon: path.join(app.getAppPath(), 'assets/robot-bell.png'),
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -102,7 +103,7 @@ function createWindow(): void {
 }
 
 function createTray(): void {
-  const iconPath = path.join(app.getAppPath(), 'assets/tray-icon.png');
+  const iconPath = path.join(app.getAppPath(), 'assets/robot-bell-dark.png');
   let icon = nativeImage.createFromPath(iconPath);
   if (icon.isEmpty()) {
     icon = nativeImage.createEmpty();
@@ -110,6 +111,10 @@ function createTray(): void {
   if (process.platform === 'darwin') {
     icon = icon.resize({ width: 16, height: 16 });
     icon.setTemplateImage(true);
+  } else if (process.platform === 'win32') {
+    icon = icon.resize({ width: 16, height: 16 });
+  } else {
+    icon = icon.resize({ width: 22, height: 22 });
   }
 
   tray = new Tray(icon);
@@ -523,6 +528,9 @@ ipcMain.handle('pick-file', async () => {
 
 // Lifecycle
 app.on('ready', () => {
+  if (app.dock && !app.isPackaged) {
+    app.dock.setIcon(path.join(app.getAppPath(), 'assets/robot-bell.png'));
+  }
   initDefaultTabs();
   store.get('tabs').forEach((tab) => startupTabIds.add(tab.id));
   createWindow();

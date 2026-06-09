@@ -50,6 +50,7 @@
       "category": "Utility"
     },
     "win": {
+      "icon": "assets/robot-bell.ico",
       "target": [
         { "target": "nsis", "arch": ["x64"] }
       ]
