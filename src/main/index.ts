@@ -54,6 +54,7 @@ const store = new Store<StoreSchema>({
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 const pollTimers = new Map<string, NodeJS.Timeout>();
+const startupTabIds = new Set<string>();
 let isQuitting = false;
 
 function welcomeFilePath(): string {
@@ -231,7 +232,8 @@ function checkLocalFile(tab: Tab): void {
   }
 
   const newUpdatedAt = String(stat.mtimeMs);
-  if (newUpdatedAt === getTabState(tab.id).lastUpdatedAt) return;
+  const isStartup = startupTabIds.delete(tab.id);
+  if (!isStartup && newUpdatedAt === getTabState(tab.id).lastUpdatedAt) return;
 
   let content: string;
   try {
@@ -275,6 +277,7 @@ function fetchGist(tab: Tab): void {
   }
 
   const { lastEtag, lastUpdatedAt } = getTabState(tab.id);
+  const isStartup = startupTabIds.delete(tab.id);
   const { githubToken } = store.get('config');
 
   const headers: Record<string, string> = {
@@ -283,7 +286,7 @@ function fetchGist(tab: Tab): void {
     'X-GitHub-Api-Version': '2022-11-28',
   };
   if (githubToken) headers['Authorization'] = `Bearer ${githubToken}`;
-  if (lastEtag) headers['If-None-Match'] = lastEtag;
+  if (lastEtag && !isStartup) headers['If-None-Match'] = lastEtag;
 
   const req = https.request(
     {
@@ -318,7 +321,7 @@ function fetchGist(tab: Tab): void {
 
           if (etag) setTabState(tab.id, { lastEtag: etag });
 
-          if (newUpdatedAt !== lastUpdatedAt) {
+          if (isStartup || newUpdatedAt !== lastUpdatedAt) {
             setTabState(tab.id, { lastUpdatedAt: newUpdatedAt });
             const { content, contentType } = buildGistContent(gist);
             deliverContent(tab.id, {
@@ -521,6 +524,7 @@ ipcMain.handle('pick-file', async () => {
 // Lifecycle
 app.on('ready', () => {
   initDefaultTabs();
+  store.get('tabs').forEach((tab) => startupTabIds.add(tab.id));
   createWindow();
   createTray();
   startAllPolling();
