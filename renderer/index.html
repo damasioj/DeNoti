@@ -19,6 +19,7 @@
         <span class="subtitle" id="subtitle">Monitor</span>
       </div>
       <div class="header-right">
+        <button class="btn btn-icon" id="theme-btn" title="Toggle theme">◑</button>
         <button class="btn btn-icon" id="poll-btn" title="Poll active tab">&#8635;</button>
         <button class="btn btn-icon" id="settings-btn" title="Global settings">&#9881;</button>
       </div>
@@ -174,6 +175,16 @@
   <script>
   (function () {
     const api = window.api;
+
+    // --- Theme toggle ---
+    const themeBtn = document.getElementById('theme-btn');
+    if (localStorage.getItem('theme') === 'light') {
+      document.body.classList.add('light-theme');
+    }
+    themeBtn.addEventListener('click', () => {
+      const isLight = document.body.classList.toggle('light-theme');
+      localStorage.setItem('theme', isLight ? 'light' : 'dark');
+    });
 
     let tabs = [];
     let activeTabId = null;
