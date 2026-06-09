@@ -264,7 +264,11 @@
       activeTabId = tabId;
       freshTabIds.delete(tabId);
       renderTabBar();
-      renderActiveContent();
+      if (!document.getElementById('settings-view').classList.contains('hidden')) {
+        showTabSettings(tabId);
+      } else {
+        renderActiveContent();
+      }
       updateTabBarActions();
     }
 
