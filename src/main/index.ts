@@ -4,6 +4,7 @@ import * as https from 'https';
 import * as fs from 'fs';
 import { randomUUID } from 'crypto';
 import Store from 'electron-store';
+import { autoUpdater } from 'electron-updater';
 
 type SourceType = 'gist' | 'local';
 type ContentType = 'markdown' | 'html';
@@ -56,9 +57,41 @@ let tray: Tray | null = null;
 const pollTimers = new Map<string, NodeJS.Timeout>();
 const startupTabIds = new Set<string>();
 let isQuitting = false;
+let updateDownloaded = false;
 
 function welcomeFilePath(): string {
   return path.join(app.getAppPath(), 'assets/welcome.md');
+}
+
+function initAutoUpdater(): void {
+  if (process.platform === 'darwin' || !app.isPackaged) return;
+
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on('update-available', () => {
+    updateTrayMenu();
+  });
+
+  autoUpdater.on('update-downloaded', () => {
+    updateDownloaded = true;
+    updateTrayMenu();
+    dialog.showMessageBox({
+      type: 'info',
+      title: 'Update Ready',
+      message: 'A new version of DeNoti is ready to install. Restart now to apply the update.',
+      buttons: ['Restart Now', 'Later'],
+      defaultId: 0,
+    }).then(({ response }) => {
+      if (response === 0) autoUpdater.quitAndInstall();
+    });
+  });
+
+  autoUpdater.on('error', (err) => {
+    console.error('[updater]', err.message);
+  });
+
+  autoUpdater.checkForUpdates().catch((err) => console.error('[updater]', err.message));
 }
 
 function createWindow(): void {
@@ -157,6 +190,15 @@ function updateTrayMenu(): void {
         menuItems.push({ label: `  ${tab.name}`, click: () => checkTabForUpdates(tab.id) });
       });
     }
+  }
+
+  if (process.platform !== 'darwin' && app.isPackaged) {
+    menuItems.push(
+      { type: 'separator' },
+      updateDownloaded
+        ? { label: 'Restart to Update', click: () => autoUpdater.quitAndInstall() }
+        : { label: 'Check for Updates', click: () => autoUpdater.checkForUpdates().catch((err) => console.error('[updater]', err.message)) }
+    );
   }
 
   menuItems.push(
@@ -531,6 +573,7 @@ app.on('ready', () => {
   if (app.dock && !app.isPackaged) {
     app.dock.setIcon(path.join(app.getAppPath(), 'assets/robot-bell.png'));
   }
+  initAutoUpdater();
   initDefaultTabs();
   store.get('tabs').forEach((tab) => startupTabIds.add(tab.id));
   createWindow();
