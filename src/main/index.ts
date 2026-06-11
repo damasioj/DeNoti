@@ -478,6 +478,8 @@ function initDefaultTabs(): void {
 }
 
 // IPC
+ipcMain.handle('get-version', () => app.getVersion());
+
 ipcMain.handle('get-welcome-path', () => welcomeFilePath());
 
 ipcMain.handle('get-config', () => store.get('config'));

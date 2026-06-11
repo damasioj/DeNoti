@@ -1,0 +1,54 @@
+name: Release
+
+# Triggered by pushing a version tag, e.g.
+#   git tag v0.2.1 && git push origin v0.2.1
+#
+# The tag must match the "version" in package.json — electron-builder names
+# the GitHub Release from package.json (v<version>), not from the git tag.
+# Bump package.json first, commit, then tag with the matching v<version>.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+# Allow GITHUB_TOKEN to create the release and upload assets.
+permissions:
+  contents: write
+
+jobs:
+  release:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: --mac
+          - os: windows-latest
+            platform: --win
+          - os: ubuntu-latest
+            platform: --linux
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      # Each runner builds its native targets and uploads them to the same
+      # draft release (created by the first runner, reused by the rest).
+      - name: Build and publish
+        run: npx electron-builder ${{ matrix.platform }} --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

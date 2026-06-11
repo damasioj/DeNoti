@@ -136,6 +136,7 @@
 
     <!-- Global settings view -->
     <main class="view hidden" id="global-settings-view">
+      <span id="app-version" class="settings-version"></span>
       <div class="settings-container">
         <h2>Global Settings</h2>
 
@@ -482,10 +483,11 @@
     document.getElementById('settings-btn').addEventListener('click', () => showGlobalSettings());
 
     async function showGlobalSettings() {
-      const config = await api.getConfig();
+      const [config, version] = await Promise.all([api.getConfig(), api.getVersion()]);
       document.getElementById('global-token').value = config.githubToken || '';
       document.getElementById('poll-on-startup').checked = config.pollOnStartup ?? true;
       document.getElementById('poll-on-wake').checked = config.pollOnWake ?? true;
+      document.getElementById('app-version').textContent = `v${version}`;
       const status = document.getElementById('global-save-status');
       status.textContent = '';
       status.className = 'save-status hidden';

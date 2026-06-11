@@ -430,6 +430,19 @@ html, body {
 }
 
 /* Settings */
+#global-settings-view {
+  position: relative;
+}
+
+.settings-version {
+  position: absolute;
+  bottom: 12px;
+  right: 16px;
+  font-size: 11px;
+  color: var(--text-dim);
+  pointer-events: none;
+}
+
 .settings-container {
   flex: 1;
   overflow-y: auto;

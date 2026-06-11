@@ -96,7 +96,8 @@
     "publish": {
       "provider": "github",
       "owner": "damasioj",
-      "repo": "DeNoti"
+      "repo": "DeNoti",
+      "releaseType": "draft"
     }
   },
   "devDependencies": {
