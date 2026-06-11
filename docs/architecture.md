@@ -153,6 +153,7 @@ All communication uses Electron's `ipcMain.handle` / `ipcRenderer.invoke` (reque
 | `set-tabs` | `Tab[]` | `{ success: true }` | Full replace; diffs against current to manage timers and state |
 | `poll-now` | `tabId?: string` | `void` | Poll one tab or all if omitted |
 | `pick-file` | — | `string \| null` | Opens native file-picker dialog |
+| `confirm-delete-tab` | `name: string` | `boolean` | Native warning dialog; resolves `true` only if the user confirms deletion |
 
 ### Push events (main → renderer)
 

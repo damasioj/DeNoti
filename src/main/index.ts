@@ -570,6 +570,20 @@ ipcMain.handle('pick-file', async () => {
   return result.filePaths[0];
 });
 
+ipcMain.handle('confirm-delete-tab', async (_event, tabName: string) => {
+  if (!mainWindow) return false;
+  const { response } = await dialog.showMessageBox(mainWindow, {
+    type: 'warning',
+    buttons: ['Delete', 'Cancel'],
+    defaultId: 1,
+    cancelId: 1,
+    title: 'Delete Tab',
+    message: `Delete "${tabName}"?`,
+    detail: 'This removes the tab and stops monitoring its source. This cannot be undone.',
+  });
+  return response === 0;
+});
+
 // Lifecycle
 app.on('ready', () => {
   if (app.dock && !app.isPackaged) {

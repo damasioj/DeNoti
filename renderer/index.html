@@ -31,7 +31,6 @@
       <div class="tab-bar-actions" id="tab-bar-actions">
         <button class="tab-action-btn" id="add-tab-btn" title="Add tab">+</button>
         <button class="tab-action-btn" id="edit-tab-btn" title="Edit tab" disabled>&#9998;</button>
-        <button class="tab-action-btn tab-action-danger" id="delete-tab-btn" title="Delete tab" disabled>&#10005;</button>
       </div>
     </div>
 
@@ -128,6 +127,7 @@
         <div class="form-actions">
           <button class="btn btn-primary" id="save-btn">Save</button>
           <button class="btn btn-secondary" id="cancel-btn">Cancel</button>
+          <button class="btn btn-danger hidden" id="settings-delete-btn">Delete Tab</button>
         </div>
 
         <div id="save-status" class="save-status hidden"></div>
@@ -233,9 +233,7 @@
     }
 
     function updateTabBarActions() {
-      const hasActive = !!activeTabId;
-      document.getElementById('edit-tab-btn').disabled = !hasActive;
-      document.getElementById('delete-tab-btn').disabled = !hasActive;
+      document.getElementById('edit-tab-btn').disabled = !activeTabId;
     }
 
     function startInlineRename(tabId, btn, nameSpan) {
@@ -290,9 +288,12 @@
       if (activeTabId) showTabSettings(activeTabId);
     });
 
-    document.getElementById('delete-tab-btn').addEventListener('click', async () => {
-      if (!activeTabId) return;
-      const removedId = activeTabId;
+    document.getElementById('settings-delete-btn').addEventListener('click', async () => {
+      if (!editingTabId) return;
+      const removedId = editingTabId;
+      const tab = tabs.find((t) => t.id === removedId);
+      const confirmed = await api.confirmDeleteTab(tab ? tab.name : 'this tab');
+      if (!confirmed) return;
       const newTabs = tabs.filter((t) => t.id !== removedId);
       try {
         await api.setTabs(newTabs);
@@ -303,6 +304,7 @@
         renderTabBar();
         renderActiveContent();
         updateTabBarActions();
+        showView('content');
       } catch {
         // silently ignore — tab stays
       }
@@ -463,6 +465,7 @@
       const tab = tabId ? tabs.find((t) => t.id === tabId) : null;
 
       document.getElementById('settings-title').textContent = tab ? 'Edit Tab' : 'New Tab';
+      document.getElementById('settings-delete-btn').classList.toggle('hidden', !tab);
       document.getElementById('tab-name').value = tab ? tab.name : '';
       document.getElementById('gist-id').value = tab ? tab.gistId : '';
       document.getElementById('local-path').value =

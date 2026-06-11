@@ -244,12 +244,6 @@ html, body {
   cursor: not-allowed;
 }
 
-.tab-action-btn.tab-action-danger:hover:not(:disabled) {
-  background: var(--error);
-  border-color: var(--error);
-  color: white;
-}
-
 /* Views */
 .view {
   flex: 1;
@@ -590,6 +584,11 @@ input[type="range"]::-webkit-slider-thumb {
   display: flex;
   gap: 12px;
   margin-top: 8px;
+}
+
+/* Push the destructive action away from Save/Cancel */
+#settings-delete-btn {
+  margin-left: auto;
 }
 
 .settings-divider {
