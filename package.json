@@ -1,6 +1,6 @@
 {
   "name": "denoti",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Poll GitHub Gists and display updates as a desktop notification window",
   "author": {
     "name": "Joshua Damasio",
