@@ -63,19 +63,33 @@ function welcomeFilePath(): string {
   return path.join(app.getAppPath(), 'assets/welcome.md');
 }
 
+function updatesSupported(): boolean {
+  return process.platform !== 'darwin' && app.isPackaged;
+}
+
+function sendUpdateStatus(payload: { status: string; version?: string; message?: string }): void {
+  mainWindow?.webContents.send('update-status', payload);
+}
+
 function initAutoUpdater(): void {
-  if (process.platform === 'darwin' || !app.isPackaged) return;
+  if (!updatesSupported()) return;
 
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
 
-  autoUpdater.on('update-available', () => {
+  autoUpdater.on('update-available', (info) => {
     updateTrayMenu();
+    sendUpdateStatus({ status: 'available', version: info.version });
   });
 
-  autoUpdater.on('update-downloaded', () => {
+  autoUpdater.on('update-not-available', () => {
+    sendUpdateStatus({ status: 'none' });
+  });
+
+  autoUpdater.on('update-downloaded', (info) => {
     updateDownloaded = true;
     updateTrayMenu();
+    sendUpdateStatus({ status: 'downloaded', version: info.version });
     dialog.showMessageBox({
       type: 'info',
       title: 'Update Ready',
@@ -89,6 +103,7 @@ function initAutoUpdater(): void {
 
   autoUpdater.on('error', (err) => {
     console.error('[updater]', err.message);
+    sendUpdateStatus({ status: 'error', message: err.message });
   });
 
   autoUpdater.checkForUpdates().catch((err) => console.error('[updater]', err.message));
@@ -582,6 +597,16 @@ ipcMain.handle('confirm-delete-tab', async (_event, tabName: string) => {
     detail: 'This removes the tab and stops monitoring its source. This cannot be undone.',
   });
   return response === 0;
+});
+
+ipcMain.handle('get-update-support', () => updatesSupported());
+
+ipcMain.handle('check-for-updates', () => {
+  if (!updatesSupported()) return { supported: false };
+  autoUpdater.checkForUpdates().catch((err: Error) => {
+    sendUpdateStatus({ status: 'error', message: err.message });
+  });
+  return { supported: true };
 });
 
 // Lifecycle

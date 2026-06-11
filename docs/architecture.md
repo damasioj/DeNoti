@@ -154,6 +154,8 @@ All communication uses Electron's `ipcMain.handle` / `ipcRenderer.invoke` (reque
 | `poll-now` | `tabId?: string` | `void` | Poll one tab or all if omitted |
 | `pick-file` | — | `string \| null` | Opens native file-picker dialog |
 | `confirm-delete-tab` | `name: string` | `boolean` | Native warning dialog; resolves `true` only if the user confirms deletion |
+| `get-update-support` | — | `boolean` | Whether auto-updates apply here (packaged, non-macOS) |
+| `check-for-updates` | — | `{ supported: boolean }` | Triggers an update check; progress arrives via `update-status` |
 
 ### Push events (main → renderer)
 
@@ -162,6 +164,7 @@ All communication uses Electron's `ipcMain.handle` / `ipcRenderer.invoke` (reque
 | `tab-content` | `{ tabId, content, contentType, updatedAt, description, source }` | New content available for a tab |
 | `tab-error` | `{ tabId, message }` | Polling error for a tab |
 | `navigate` | `'settings'` | Tray menu asked to open settings |
+| `update-status` | `{ status: 'available' \| 'none' \| 'downloaded' \| 'error', version?, message? }` | Auto-updater progress for the settings UI |
 
 ---
 

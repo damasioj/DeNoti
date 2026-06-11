@@ -166,6 +166,13 @@
           </div>
         </div>
 
+        <div class="form-group hidden" id="updates-group">
+          <label>Updates</label>
+          <button type="button" class="btn btn-secondary" id="check-updates-btn">Check for Updates</button>
+          <small>DeNoti checks automatically; use this to check right now.</small>
+          <div id="update-check-status" class="save-status hidden"></div>
+        </div>
+
         <div class="form-actions">
           <button class="btn btn-primary" id="global-save-btn">Save</button>
           <button class="btn btn-secondary" id="global-cancel-btn">Cancel</button>
@@ -486,11 +493,18 @@
     document.getElementById('settings-btn').addEventListener('click', () => showGlobalSettings());
 
     async function showGlobalSettings() {
-      const [config, version] = await Promise.all([api.getConfig(), api.getVersion()]);
+      const [config, version, updatesSupported] = await Promise.all([
+        api.getConfig(), api.getVersion(), api.getUpdateSupport(),
+      ]);
       document.getElementById('global-token').value = config.githubToken || '';
       document.getElementById('poll-on-startup').checked = config.pollOnStartup ?? true;
       document.getElementById('poll-on-wake').checked = config.pollOnWake ?? true;
       document.getElementById('app-version').textContent = `v${version}`;
+      document.getElementById('updates-group').classList.toggle('hidden', !updatesSupported);
+      const updateStatus = document.getElementById('update-check-status');
+      updateStatus.textContent = '';
+      updateStatus.className = 'save-status hidden';
+      document.getElementById('check-updates-btn').disabled = false;
       const status = document.getElementById('global-save-status');
       status.textContent = '';
       status.className = 'save-status hidden';
@@ -515,6 +529,52 @@
       } catch {
         status.textContent = '✗ Failed to save.';
         status.className = 'save-status error';
+      }
+    });
+
+    // --- Update checks ---
+    const checkUpdatesBtn = document.getElementById('check-updates-btn');
+
+    function showUpdateStatus(text, variant) {
+      const el = document.getElementById('update-check-status');
+      el.textContent = text;
+      el.className = 'save-status' + (variant ? ' ' + variant : '');
+    }
+
+    checkUpdatesBtn.addEventListener('click', async () => {
+      checkUpdatesBtn.disabled = true;
+      showUpdateStatus('Checking for updates…', '');
+      try {
+        const res = await api.checkForUpdates();
+        if (!res || !res.supported) {
+          showUpdateStatus('Automatic updates aren’t available on this platform.', '');
+          checkUpdatesBtn.disabled = false;
+        }
+        // When supported, the update-status push events below drive the rest.
+      } catch {
+        showUpdateStatus('Could not check for updates.', 'error');
+        checkUpdatesBtn.disabled = false;
+      }
+    });
+
+    api.onUpdateStatus((data) => {
+      const { status, version, message } = data;
+      switch (status) {
+        case 'available':
+          showUpdateStatus(`Update available (v${version}). Downloading…`, '');
+          break;
+        case 'none':
+          showUpdateStatus('You’re on the latest version.', 'success');
+          checkUpdatesBtn.disabled = false;
+          break;
+        case 'downloaded':
+          showUpdateStatus(`Update v${version} downloaded — restart to apply.`, 'success');
+          checkUpdatesBtn.disabled = false;
+          break;
+        case 'error':
+          showUpdateStatus('Update check failed' + (message ? `: ${message}` : '.'), 'error');
+          checkUpdatesBtn.disabled = false;
+          break;
       }
     });
 
