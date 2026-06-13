@@ -141,9 +141,13 @@
         <h2>Global Settings</h2>
 
         <div class="form-group">
-          <label for="global-token">GitHub Personal Access Token <span class="optional">(optional)</span></label>
-          <input type="password" id="global-token" placeholder="ghp_..." />
-          <small>Shared across all Gist tabs. Required for private gists; increases rate limits for public ones.</small>
+          <label>GitHub Access <span class="optional">(optional)</span></label>
+          <div class="github-connect-row">
+            <button type="button" class="btn btn-secondary" id="connect-github-btn">Connect GitHub</button>
+            <span id="github-connected" class="github-connected hidden"></span>
+          </div>
+          <input type="password" id="global-token" placeholder="…or paste a token (ghp_…)" />
+          <small>Connect to authorize in your browser — no token to copy. Or paste a personal access token with the <strong>gist</strong> scope. Required for private gists; raises rate limits for public ones.</small>
         </div>
 
         <div class="form-group">
@@ -184,6 +188,20 @@
 
     <!-- Error toast -->
     <div class="toast hidden" id="error-toast"></div>
+
+    <!-- GitHub device-flow modal -->
+    <div class="modal-overlay hidden" id="github-auth-modal">
+      <div class="modal">
+        <h3>Connect GitHub</h3>
+        <p>Your browser should open to <strong>github.com/login/device</strong>. Enter this code to authorize DeNoti:</p>
+        <div class="device-code" id="device-code">--------</div>
+        <button type="button" class="btn btn-secondary" id="copy-code-btn">Copy code</button>
+        <p class="modal-hint" id="auth-hint">Waiting for you to authorize…</p>
+        <div class="form-actions">
+          <button type="button" class="btn btn-secondary" id="auth-cancel-btn">Cancel</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -497,6 +515,9 @@
         api.getConfig(), api.getVersion(), api.getUpdateSupport(),
       ]);
       document.getElementById('global-token').value = config.githubToken || '';
+      const connected = document.getElementById('github-connected');
+      connected.textContent = config.githubToken ? '✓ Connected' : '';
+      connected.className = config.githubToken ? 'github-connected' : 'github-connected hidden';
       document.getElementById('poll-on-startup').checked = config.pollOnStartup ?? true;
       document.getElementById('poll-on-wake').checked = config.pollOnWake ?? true;
       document.getElementById('app-version').textContent = `v${version}`;
@@ -575,6 +596,57 @@
           showUpdateStatus('Update check failed' + (message ? `: ${message}` : '.'), 'error');
           checkUpdatesBtn.disabled = false;
           break;
+      }
+    });
+
+    // --- GitHub connect (OAuth device flow) ---
+    const githubModal = document.getElementById('github-auth-modal');
+    const deviceCodeEl = document.getElementById('device-code');
+    const authHint = document.getElementById('auth-hint');
+
+    function closeGithubModal() {
+      githubModal.classList.add('hidden');
+    }
+
+    document.getElementById('connect-github-btn').addEventListener('click', async () => {
+      authHint.textContent = 'Waiting for you to authorize…';
+      authHint.className = 'modal-hint';
+      deviceCodeEl.textContent = '········';
+      const res = await api.startGithubAuth();
+      if (!res || !res.started) {
+        const connected = document.getElementById('github-connected');
+        connected.textContent = '⚠ ' + ((res && res.message) || 'Could not start sign-in.');
+        connected.className = 'github-connected error';
+        return;
+      }
+      deviceCodeEl.textContent = res.userCode;
+      githubModal.classList.remove('hidden');
+    });
+
+    document.getElementById('copy-code-btn').addEventListener('click', () => {
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(deviceCodeEl.textContent || '').catch(() => {});
+      }
+    });
+
+    document.getElementById('auth-cancel-btn').addEventListener('click', () => {
+      api.cancelGithubAuth();
+      closeGithubModal();
+    });
+
+    api.onGithubAuthStatus(async (data) => {
+      const { status, username, message } = data;
+      const connected = document.getElementById('github-connected');
+      if (status === 'connected') {
+        closeGithubModal();
+        connected.textContent = username ? `✓ Connected as @${username}` : '✓ Connected';
+        connected.className = 'github-connected';
+        // Token is now stored by the main process; re-sync the field so Save keeps it.
+        const cfg = await api.getConfig();
+        document.getElementById('global-token').value = cfg.githubToken || '';
+      } else if (status === 'error') {
+        authHint.textContent = message || 'Authorization failed.';
+        authHint.className = 'modal-hint error';
       }
     });
 

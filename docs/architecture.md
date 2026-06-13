@@ -156,6 +156,8 @@ All communication uses Electron's `ipcMain.handle` / `ipcRenderer.invoke` (reque
 | `confirm-delete-tab` | `name: string` | `boolean` | Native warning dialog; resolves `true` only if the user confirms deletion |
 | `get-update-support` | — | `boolean` | Whether auto-updates apply here (packaged, non-macOS) |
 | `check-for-updates` | — | `{ supported: boolean }` | Triggers an update check; progress arrives via `update-status` |
+| `start-github-auth` | — | `{ started, userCode?, verificationUri?, message? }` | Begins the GitHub OAuth device flow, opens the browser, starts polling |
+| `cancel-github-auth` | — | `void` | Stops the in-flight device-flow polling |
 
 ### Push events (main → renderer)
 
@@ -165,6 +167,7 @@ All communication uses Electron's `ipcMain.handle` / `ipcRenderer.invoke` (reque
 | `tab-error` | `{ tabId, message }` | Polling error for a tab |
 | `navigate` | `'settings'` | Tray menu asked to open settings |
 | `update-status` | `{ status: 'available' \| 'none' \| 'downloaded' \| 'error', version?, message? }` | Auto-updater progress for the settings UI |
+| `github-auth-status` | `{ status: 'connected' \| 'error', username?, message? }` | GitHub device-flow result for the settings UI |
 
 ---
 

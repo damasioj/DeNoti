@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, dialog, powerMonitor } from 'electron';
+import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, dialog, powerMonitor, shell } from 'electron';
 import * as path from 'path';
 import * as https from 'https';
 import * as fs from 'fs';
@@ -58,6 +58,14 @@ const pollTimers = new Map<string, NodeJS.Timeout>();
 const startupTabIds = new Set<string>();
 let isQuitting = false;
 let updateDownloaded = false;
+let githubAuthPollTimer: NodeJS.Timeout | null = null;
+
+// Public Client ID for the GitHub OAuth App used by the Device Authorization
+// Flow. Device flow uses no client secret, so this identifier is safe to commit.
+// Register an OAuth App at github.com/settings/applications/new, enable
+// "Device Flow", and paste its Client ID here to activate browser sign-in.
+const GITHUB_CLIENT_ID = 'YOUR_GITHUB_OAUTH_CLIENT_ID';
+const GITHUB_OAUTH_SCOPE = 'gist';
 
 function welcomeFilePath(): string {
   return path.join(app.getAppPath(), 'assets/welcome.md');
@@ -492,6 +500,160 @@ function initDefaultTabs(): void {
   ]);
 }
 
+// --- GitHub OAuth Device Flow ---
+
+function clearGistEtags(): void {
+  const states = store.get('tabStates');
+  for (const tab of store.get('tabs')) {
+    if (tab.sourceType === 'gist' && states[tab.id]) {
+      states[tab.id] = { ...states[tab.id], lastEtag: '' };
+    }
+  }
+  store.set('tabStates', states);
+}
+
+function setGithubToken(token: string): void {
+  store.set('config', { ...store.get('config'), githubToken: token });
+  clearGistEtags(); // re-fetch gist tabs with the new token
+}
+
+function sendGithubAuthStatus(payload: {
+  status: 'connected' | 'error';
+  username?: string;
+  message?: string;
+}): void {
+  mainWindow?.webContents.send('github-auth-status', payload);
+}
+
+function githubPostForm(reqPath: string, params: Record<string, string>): Promise<Record<string, unknown>> {
+  return new Promise((resolve, reject) => {
+    const body = new URLSearchParams(params).toString();
+    const req = https.request(
+      {
+        hostname: 'github.com',
+        path: reqPath,
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Content-Length': Buffer.byteLength(body),
+          'User-Agent': 'DeNoti',
+        },
+      },
+      (res) => {
+        let data = '';
+        res.on('data', (chunk: Buffer) => { data += chunk.toString(); });
+        res.on('end', () => {
+          try {
+            resolve(JSON.parse(data) as Record<string, unknown>);
+          } catch {
+            reject(new Error('Unexpected response from GitHub.'));
+          }
+        });
+      }
+    );
+    req.on('error', reject);
+    req.write(body);
+    req.end();
+  });
+}
+
+function fetchGithubUsername(token: string): Promise<string | undefined> {
+  return new Promise((resolve) => {
+    const req = https.request(
+      {
+        hostname: 'api.github.com',
+        path: '/user',
+        method: 'GET',
+        headers: {
+          Accept: 'application/vnd.github+json',
+          Authorization: `Bearer ${token}`,
+          'User-Agent': 'DeNoti',
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+      },
+      (res) => {
+        let data = '';
+        res.on('data', (chunk: Buffer) => { data += chunk.toString(); });
+        res.on('end', () => {
+          try {
+            resolve((JSON.parse(data) as { login?: string }).login);
+          } catch {
+            resolve(undefined);
+          }
+        });
+      }
+    );
+    req.on('error', () => resolve(undefined));
+    req.end();
+  });
+}
+
+function pollForGithubToken(deviceCode: string, intervalSeconds: number): void {
+  githubAuthPollTimer = setTimeout(() => {
+    githubPostForm('/login/oauth/access_token', {
+      client_id: GITHUB_CLIENT_ID,
+      device_code: deviceCode,
+      grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+    })
+      .then(async (res) => {
+        if (typeof res.access_token === 'string') {
+          setGithubToken(res.access_token);
+          const username = await fetchGithubUsername(res.access_token);
+          sendGithubAuthStatus({ status: 'connected', username });
+          return;
+        }
+        switch (res.error) {
+          case 'authorization_pending':
+            pollForGithubToken(deviceCode, intervalSeconds);
+            break;
+          case 'slow_down':
+            pollForGithubToken(deviceCode, intervalSeconds + 5);
+            break;
+          case 'expired_token':
+            sendGithubAuthStatus({ status: 'error', message: 'The code expired before you authorized. Please try again.' });
+            break;
+          case 'access_denied':
+            sendGithubAuthStatus({ status: 'error', message: 'Authorization was denied.' });
+            break;
+          default:
+            sendGithubAuthStatus({ status: 'error', message: (res.error_description as string) || 'GitHub authorization failed.' });
+        }
+      })
+      .catch((err: Error) => {
+        sendGithubAuthStatus({ status: 'error', message: err.message });
+      });
+  }, intervalSeconds * 1000);
+}
+
+async function startGithubAuth(): Promise<{ started: boolean; userCode?: string; verificationUri?: string; message?: string }> {
+  if (GITHUB_CLIENT_ID === 'YOUR_GITHUB_OAUTH_CLIENT_ID') {
+    return { started: false, message: 'GitHub sign-in is not configured in this build.' };
+  }
+  if (githubAuthPollTimer) {
+    clearTimeout(githubAuthPollTimer);
+    githubAuthPollTimer = null;
+  }
+  try {
+    const res = await githubPostForm('/login/device/code', {
+      client_id: GITHUB_CLIENT_ID,
+      scope: GITHUB_OAUTH_SCOPE,
+    });
+    const deviceCode = res.device_code as string | undefined;
+    const userCode = res.user_code as string | undefined;
+    const verificationUri = (res.verification_uri as string) || 'https://github.com/login/device';
+    const interval = (res.interval as number) || 5;
+    if (!deviceCode || !userCode) {
+      return { started: false, message: 'Could not start GitHub sign-in. Please try again.' };
+    }
+    shell.openExternal(verificationUri).catch(() => { /* user can navigate to the URL manually */ });
+    pollForGithubToken(deviceCode, interval);
+    return { started: true, userCode, verificationUri };
+  } catch (err) {
+    return { started: false, message: (err as Error).message };
+  }
+}
+
 // IPC
 ipcMain.handle('get-version', () => app.getVersion());
 
@@ -501,14 +663,7 @@ ipcMain.handle('get-config', () => store.get('config'));
 
 ipcMain.handle('set-config', (_event, config: AppConfig) => {
   store.set('config', config);
-  // Clear etag cache for all gist tabs so they re-fetch with the updated token
-  const states = store.get('tabStates');
-  for (const tab of store.get('tabs')) {
-    if (tab.sourceType === 'gist' && states[tab.id]) {
-      states[tab.id] = { ...states[tab.id], lastEtag: '' };
-    }
-  }
-  store.set('tabStates', states);
+  clearGistEtags(); // re-fetch gist tabs with the (possibly) updated token
   return { success: true };
 });
 
@@ -607,6 +762,15 @@ ipcMain.handle('check-for-updates', () => {
     sendUpdateStatus({ status: 'error', message: err.message });
   });
   return { supported: true };
+});
+
+ipcMain.handle('start-github-auth', () => startGithubAuth());
+
+ipcMain.handle('cancel-github-auth', () => {
+  if (githubAuthPollTimer) {
+    clearTimeout(githubAuthPollTimer);
+    githubAuthPollTimer = null;
+  }
 });
 
 // Lifecycle
