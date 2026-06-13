@@ -25,6 +25,19 @@ contextBridge.exposeInMainWorld('api', {
   pickFile: (): Promise<string | null> =>
     ipcRenderer.invoke('pick-file'),
 
+  confirmDeleteTab: (name: string): Promise<boolean> =>
+    ipcRenderer.invoke('confirm-delete-tab', name),
+
+  getUpdateSupport: (): Promise<boolean> =>
+    ipcRenderer.invoke('get-update-support'),
+
+  checkForUpdates: (): Promise<{ supported: boolean }> =>
+    ipcRenderer.invoke('check-for-updates'),
+
+  onUpdateStatus: (callback: (data: unknown) => void): void => {
+    ipcRenderer.on('update-status', (_event, data) => callback(data));
+  },
+
   onTabContent: (callback: (data: unknown) => void): void => {
     ipcRenderer.on('tab-content', (_event, data) => callback(data));
   },
