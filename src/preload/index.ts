@@ -38,6 +38,16 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.on('update-status', (_event, data) => callback(data));
   },
 
+  startGithubAuth: (): Promise<{ started: boolean; userCode?: string; verificationUri?: string; message?: string }> =>
+    ipcRenderer.invoke('start-github-auth'),
+
+  cancelGithubAuth: (): Promise<void> =>
+    ipcRenderer.invoke('cancel-github-auth'),
+
+  onGithubAuthStatus: (callback: (data: unknown) => void): void => {
+    ipcRenderer.on('github-auth-status', (_event, data) => callback(data));
+  },
+
   onTabContent: (callback: (data: unknown) => void): void => {
     ipcRenderer.on('tab-content', (_event, data) => callback(data));
   },
