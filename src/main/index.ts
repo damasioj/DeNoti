@@ -64,7 +64,7 @@ let githubAuthPollTimer: NodeJS.Timeout | null = null;
 // Flow. Device flow uses no client secret, so this identifier is safe to commit.
 // Register an OAuth App at github.com/settings/applications/new, enable
 // "Device Flow", and paste its Client ID here to activate browser sign-in.
-const GITHUB_CLIENT_ID = 'YOUR_GITHUB_OAUTH_CLIENT_ID';
+const GITHUB_CLIENT_ID = 'Ov23liMmj3zwAASCEHOr';
 const GITHUB_OAUTH_SCOPE = 'gist';
 
 function welcomeFilePath(): string {
@@ -627,9 +627,6 @@ function pollForGithubToken(deviceCode: string, intervalSeconds: number): void {
 }
 
 async function startGithubAuth(): Promise<{ started: boolean; userCode?: string; verificationUri?: string; message?: string }> {
-  if (GITHUB_CLIENT_ID === 'YOUR_GITHUB_OAUTH_CLIENT_ID') {
-    return { started: false, message: 'GitHub sign-in is not configured in this build.' };
-  }
   if (githubAuthPollTimer) {
     clearTimeout(githubAuthPollTimer);
     githubAuthPollTimer = null;
