@@ -50,8 +50,8 @@ html, body {
   justify-content: space-between;
   padding: 12px 20px;
   background: var(--surface);
-  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+  -webkit-app-region: drag;
 }
 
 .header-left {
