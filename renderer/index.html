@@ -124,6 +124,16 @@
           </div>
         </div>
 
+        <div class="form-group">
+          <div class="checkbox-row">
+            <input type="checkbox" id="tab-sound-enabled" />
+            <label for="tab-sound-enabled">
+              <strong>Notification sound</strong>
+              <small>Play a sound when this tab receives new content.</small>
+            </label>
+          </div>
+        </div>
+
         <div class="form-actions">
           <button class="btn btn-primary" id="save-btn">Save</button>
           <button class="btn btn-secondary" id="cancel-btn">Cancel</button>
@@ -382,8 +392,11 @@
     api.onTabContent((data) => {
       const { tabId, content, updatedAt, description } = data;
       tabContents[tabId] = { content, updatedAt, description };
-      notificationSound.currentTime = 0;
-      notificationSound.play().catch(() => {}); // ignore missing-file / autoplay errors
+      const tab = tabs.find((t) => t.id === tabId);
+      if (tab?.soundEnabled ?? true) {
+        notificationSound.currentTime = 0;
+        notificationSound.play().catch(() => {}); // ignore missing-file / autoplay errors
+      }
       if (tabId === activeTabId) {
         renderActiveContent();
       } else {
@@ -505,6 +518,7 @@
       setIntervalControls(tab ? tab.pollIntervalMinutes : 30);
       setPollMode(tab ? (tab.pollMode ?? 'interval') : 'interval');
       document.getElementById('poll-time').value = tab ? (tab.pollTime ?? '09:00') : '09:00';
+      document.getElementById('tab-sound-enabled').checked = tab ? (tab.soundEnabled ?? true) : true;
       setSource(tab ? tab.sourceType : 'gist');
 
       const saveStatus = document.getElementById('save-status');
@@ -668,6 +682,7 @@
         pollMode: currentPollMode,
         pollIntervalMinutes: getIntervalMinutes(),
         pollTime: document.getElementById('poll-time').value || '09:00',
+        soundEnabled: document.getElementById('tab-sound-enabled').checked,
       };
 
       const newTabs = editingTabId
