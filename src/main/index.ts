@@ -58,6 +58,7 @@ let tray: Tray | null = null;
 const pollTimers = new Map<string, NodeJS.Timeout>();
 const startupTabIds = new Set<string>();
 let isQuitting = false;
+let mainObscured = false; // true while the main window is minimized or hidden to tray
 let updateDownloaded = false;
 let githubAuthPollTimer: NodeJS.Timeout | null = null;
 
@@ -156,8 +157,17 @@ function createWindow(): void {
     if (!isQuitting) {
       event.preventDefault();
       mainWindow?.hide();
+      mainObscured = true;
     }
   });
+
+  // Track whether the main window is off-screen (minimized or hidden to tray) via
+  // events — querying isVisible() at delivery time is unreliable on macOS.
+  mainWindow.on('hide', () => { mainObscured = true; });
+  mainWindow.on('minimize', () => { mainObscured = true; });
+  mainWindow.on('show', () => { mainObscured = false; });
+  mainWindow.on('restore', () => { mainObscured = false; });
+  mainWindow.on('focus', () => { mainObscured = false; });
 }
 
 function createTray(): void {
@@ -254,10 +264,6 @@ function sendError(tabId: string, message: string): void {
   mainWindow?.webContents.send('tab-error', { tabId, message });
 }
 
-function isMainVisible(): boolean {
-  return !!mainWindow && mainWindow.isVisible() && !mainWindow.isMinimized();
-}
-
 // macOS custom toast window — native notifications need a code-signed app, so on
 // macOS we show our own transient pop-up instead. Created only on darwin.
 let toastWindow: BrowserWindow | null = null;
@@ -336,7 +342,7 @@ function deliverContent(
   mainWindow?.webContents.send('tab-content', { tabId, ...payload });
   // While DeNoti is open the renderer just dots the tab; while it's minimized or
   // hidden to tray, surface a brief OS notification instead of popping the window.
-  if (!isMainVisible()) notifyUpdate(tabId);
+  if (mainObscured) notifyUpdate(tabId);
 }
 
 function getTabState(tabId: string): TabPollState {
