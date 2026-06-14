@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, dialog, powerMonitor, shell, Notification } from 'electron';
+import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, dialog, powerMonitor, shell, Notification, screen } from 'electron';
 import * as path from 'path';
 import * as https from 'https';
 import * as fs from 'fs';
@@ -258,9 +258,64 @@ function isMainVisible(): boolean {
   return !!mainWindow && mainWindow.isVisible() && !mainWindow.isMinimized();
 }
 
+// macOS custom toast window — native notifications need a code-signed app, so on
+// macOS we show our own transient pop-up instead. Created only on darwin.
+let toastWindow: BrowserWindow | null = null;
+
+function createToastWindow(): void {
+  toastWindow = new BrowserWindow({
+    width: 320,
+    height: 110,
+    show: false,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    movable: false,
+    minimizable: false,
+    maximizable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    icon: path.join(app.getAppPath(), 'assets/robot-bell.png'),
+    webPreferences: {
+      preload: path.join(__dirname, '../preload/index.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+  toastWindow.setAlwaysOnTop(true, 'floating');
+  toastWindow.loadFile(path.join(app.getAppPath(), 'renderer/toast.html'));
+}
+
+function positionToast(): void {
+  if (!toastWindow) return;
+  const display = mainWindow
+    ? screen.getDisplayMatching(mainWindow.getBounds())
+    : screen.getPrimaryDisplay();
+  const { workArea } = display;
+  const [w, h] = toastWindow.getSize();
+  const margin = 16;
+  toastWindow.setPosition(
+    Math.round(workArea.x + workArea.width - w - margin),
+    Math.round(workArea.y + workArea.height - h - margin)
+  );
+}
+
+function showToast(tabId: string, name: string): void {
+  if (!toastWindow) return;
+  positionToast();
+  toastWindow.showInactive(); // appear without stealing focus
+  toastWindow.webContents.send('toast-show', { tabId, name });
+}
+
 function notifyUpdate(tabId: string): void {
-  if (!Notification.isSupported()) return;
   const name = store.get('tabs').find((t) => t.id === tabId)?.name ?? 'Tab';
+  // macOS: native notifications require code-signing, so use the custom toast.
+  if (process.platform === 'darwin') {
+    showToast(tabId, name);
+    return;
+  }
+  // Windows / Linux: native OS notification (works without signing).
+  if (!Notification.isSupported()) return;
   const notification = new Notification({
     title: name,
     body: 'File was updated',
@@ -796,6 +851,16 @@ ipcMain.handle('cancel-github-auth', () => {
   }
 });
 
+ipcMain.handle('toast-dismiss', () => {
+  toastWindow?.hide();
+});
+
+ipcMain.handle('toast-open-tab', (_event, tabId: string) => {
+  showWindow();
+  mainWindow?.webContents.send('navigate-tab', tabId);
+  toastWindow?.hide();
+});
+
 // Lifecycle
 app.on('ready', () => {
   if (app.dock && !app.isPackaged) {
@@ -805,6 +870,7 @@ app.on('ready', () => {
   initDefaultTabs();
   store.get('tabs').forEach((tab) => startupTabIds.add(tab.id));
   createWindow();
+  if (process.platform === 'darwin') createToastWindow();
   createTray();
   startAllPolling();
 

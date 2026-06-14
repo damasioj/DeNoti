@@ -63,4 +63,14 @@ contextBridge.exposeInMainWorld('api', {
   onNavigateTab: (callback: (tabId: string) => void): void => {
     ipcRenderer.on('navigate-tab', (_event, tabId) => callback(tabId));
   },
+
+  onToastShow: (callback: (data: unknown) => void): void => {
+    ipcRenderer.on('toast-show', (_event, data) => callback(data));
+  },
+
+  toastDismiss: (): Promise<void> =>
+    ipcRenderer.invoke('toast-dismiss'),
+
+  toastOpenTab: (tabId: string): Promise<void> =>
+    ipcRenderer.invoke('toast-open-tab', tabId),
 });
