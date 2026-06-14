@@ -37,6 +37,7 @@ src/
 renderer/
   index.html           All UI: tab bar, content view, settings view, JS
   styles.css           Dark-theme CSS (variables, markdown styles, tab bar)
+  toast.html           macOS custom notification toast window (own styles + JS)
 assets/
   welcome.md           Shown on first launch (default local-file tab)
   setup-guide.md       End-user guide: Claude Routines + Gists setup
@@ -160,6 +161,8 @@ All communication uses Electron's `ipcMain.handle` / `ipcRenderer.invoke` (reque
 | `check-for-updates` | — | `{ supported: boolean }` | Triggers an update check; progress arrives via `update-status` |
 | `start-github-auth` | — | `{ started, userCode?, verificationUri?, message? }` | Begins the GitHub OAuth device flow, opens the browser, starts polling |
 | `cancel-github-auth` | — | `void` | Stops the in-flight device-flow polling |
+| `toast-dismiss` | — | `void` | macOS toast asks to hide itself (after auto-dismiss) |
+| `toast-open-tab` | `tabId: string` | `void` | macOS toast click: restore main window and switch to that tab |
 
 ### Push events (main → renderer)
 
@@ -170,6 +173,23 @@ All communication uses Electron's `ipcMain.handle` / `ipcRenderer.invoke` (reque
 | `navigate` | `'settings'` | Tray menu asked to open settings |
 | `update-status` | `{ status: 'available' \| 'none' \| 'downloaded' \| 'error', version?, message? }` | Auto-updater progress for the settings UI |
 | `github-auth-status` | `{ status: 'connected' \| 'error', username?, message? }` | GitHub device-flow result for the settings UI |
+| `navigate-tab` | `tabId: string` | Switch the main window to a tab (from a clicked notification/toast) |
+| `toast-show` | `{ tabId, name }` | Show the macOS custom toast for a tab update |
+
+---
+
+## Update Notifications
+
+When a tab receives new content, `deliverContent` no longer force-shows the main window. Instead:
+
+- **Main window visible** → nothing window-wise; the renderer dots the tab via `freshTabIds`.
+- **Main window minimized or hidden to tray** → a notification titled with the tab name and body "File was updated". Clicking it restores the window and switches to that tab via `navigate-tab`.
+
+The notification mechanism is platform-split (`notifyUpdate`):
+- **Windows / Linux** → native OS notification (`Notification`), `silent` (the per-tab sound is played separately by the renderer). Works without code-signing.
+- **macOS** → a custom frameless toast window (`renderer/toast.html`), because native macOS notifications require a code-signed app. It slides in bottom-right, auto-dismisses after ~4.5s, and is created only on darwin (`createToastWindow`).
+
+Because the force-show was removed, the main window is now shown explicitly on launch (in `did-finish-load`).
 
 ---
 

@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'" />
+  <title>DeNoti</title>
+  <style>
+    :root {
+      --bg: #16213e;
+      --surface: #0f3460;
+      --accent: #e94560;
+      --text: #eaeaea;
+      --text-dim: #8888aa;
+      --border: #2a2a4a;
+      --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    body.light-theme {
+      --bg: #ffffff;
+      --surface: #e2e6f3;
+      --text: #1a1a2e;
+      --text-dim: #5a5a7a;
+      --border: #c8cce0;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body { height: 100%; }
+    body {
+      background: transparent;
+      font-family: var(--font);
+      display: flex;
+      align-items: flex-end;
+      overflow: hidden;
+      user-select: none;
+    }
+
+    .toast {
+      flex: 1;
+      margin: 8px;
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      padding: 14px 16px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+      cursor: pointer;
+      transform: translateX(20px);
+      opacity: 0;
+    }
+    .toast.in { animation: slideIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+    .toast.out { animation: slideOut 0.22s ease-in forwards; }
+    @keyframes slideIn { to { transform: translateX(0); opacity: 1; } }
+    @keyframes slideOut { to { transform: translateX(20px); opacity: 0; } }
+
+    .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--accent);
+      flex-shrink: 0;
+    }
+    .body { flex: 1; overflow: hidden; }
+    .name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .msg {
+      font-size: 12px;
+      color: var(--text-dim);
+      margin-top: 2px;
+    }
+  </style>
+</head>
+<body>
+  <div class="toast" id="toast" title="Open in DeNoti">
+    <span class="dot"></span>
+    <div class="body">
+      <div class="name" id="toast-name"></div>
+      <div class="msg">File was updated</div>
+    </div>
+  </div>
+
+  <script>
+  (function () {
+    const api = window.api;
+    const card = document.getElementById('toast');
+    const nameEl = document.getElementById('toast-name');
+    let currentTabId = null;
+    let dismissTimer = null;
+
+    function applyTheme() {
+      document.body.classList.toggle('light-theme', localStorage.getItem('theme') === 'light');
+    }
+
+    function playIn() {
+      card.classList.remove('out', 'in');
+      void card.offsetWidth; // force reflow so the animation restarts
+      card.classList.add('in');
+    }
+
+    function dismiss() {
+      card.classList.remove('in');
+      card.classList.add('out');
+      setTimeout(() => api.toastDismiss(), 220); // hide window after the slide-out
+    }
+
+    api.onToastShow((data) => {
+      currentTabId = data.tabId;
+      nameEl.textContent = data.name;
+      applyTheme();
+      playIn();
+      clearTimeout(dismissTimer);
+      dismissTimer = setTimeout(dismiss, 4500);
+    });
+
+    card.addEventListener('click', () => {
+      clearTimeout(dismissTimer);
+      api.toastOpenTab(currentTabId);
+    });
+  })();
+  </script>
+</body>
+</html>
