@@ -170,6 +170,18 @@ All communication uses Electron's `ipcMain.handle` / `ipcRenderer.invoke` (reque
 | `navigate` | `'settings'` | Tray menu asked to open settings |
 | `update-status` | `{ status: 'available' \| 'none' \| 'downloaded' \| 'error', version?, message? }` | Auto-updater progress for the settings UI |
 | `github-auth-status` | `{ status: 'connected' \| 'error', username?, message? }` | GitHub device-flow result for the settings UI |
+| `navigate-tab` | `tabId: string` | Switch the main window to a tab (from a clicked OS notification) |
+
+---
+
+## Update Notifications
+
+When a tab receives new content, `deliverContent` no longer force-shows the main window. Instead:
+
+- **Main window visible** → nothing window-wise; the renderer dots the tab via `freshTabIds`.
+- **Main window minimized or hidden to tray** → a native OS notification (`Notification`) titled with the tab name and body "File was updated". It is `silent` (the per-tab sound is played separately by the renderer). Clicking it restores the window and switches to that tab via `navigate-tab`.
+
+Because the force-show was removed, the main window is now shown explicitly on launch (in `did-finish-load`).
 
 ---
 

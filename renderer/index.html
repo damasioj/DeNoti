@@ -420,6 +420,14 @@
       if (page === 'settings') showGlobalSettings();
     });
 
+    // --- Open a tab from a clicked notification ---
+    api.onNavigateTab((tabId) => {
+      if (tabs.some((t) => t.id === tabId)) {
+        showView('content');
+        setActiveTab(tabId);
+      }
+    });
+
     // --- Poll button ---
     const pollBtn = document.getElementById('poll-btn');
     pollBtn.addEventListener('click', () => {

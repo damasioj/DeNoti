@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, dialog, powerMonitor, shell } from 'electron';
+import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, dialog, powerMonitor, shell, Notification } from 'electron';
 import * as path from 'path';
 import * as https from 'https';
 import * as fs from 'fs';
@@ -148,6 +148,7 @@ function createWindow(): void {
   }
 
   mainWindow.webContents.once('did-finish-load', () => {
+    mainWindow?.show(); // show on launch — new content no longer force-shows the window
     if (store.get('config').pollOnStartup ?? true) checkAllTabs();
   });
 
@@ -253,12 +254,34 @@ function sendError(tabId: string, message: string): void {
   mainWindow?.webContents.send('tab-error', { tabId, message });
 }
 
+function isMainVisible(): boolean {
+  return !!mainWindow && mainWindow.isVisible() && !mainWindow.isMinimized();
+}
+
+function notifyUpdate(tabId: string): void {
+  if (!Notification.isSupported()) return;
+  const name = store.get('tabs').find((t) => t.id === tabId)?.name ?? 'Tab';
+  const notification = new Notification({
+    title: name,
+    body: 'File was updated',
+    icon: path.join(app.getAppPath(), 'assets/robot-bell.png'),
+    silent: true, // the per-tab notification sound is handled by the renderer
+  });
+  notification.on('click', () => {
+    showWindow();
+    mainWindow?.webContents.send('navigate-tab', tabId);
+  });
+  notification.show();
+}
+
 function deliverContent(
   tabId: string,
   payload: { content: string; contentType: ContentType; updatedAt: string; description: string; source: string }
 ): void {
   mainWindow?.webContents.send('tab-content', { tabId, ...payload });
-  showWindow();
+  // While DeNoti is open the renderer just dots the tab; while it's minimized or
+  // hidden to tray, surface a brief OS notification instead of popping the window.
+  if (!isMainVisible()) notifyUpdate(tabId);
 }
 
 function getTabState(tabId: string): TabPollState {

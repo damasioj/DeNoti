@@ -59,4 +59,8 @@ contextBridge.exposeInMainWorld('api', {
   onNavigate: (callback: (page: string) => void): void => {
     ipcRenderer.on('navigate', (_event, page) => callback(page));
   },
+
+  onNavigateTab: (callback: (tabId: string) => void): void => {
+    ipcRenderer.on('navigate-tab', (_event, tabId) => callback(tabId));
+  },
 });
