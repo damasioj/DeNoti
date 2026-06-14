@@ -25,6 +25,7 @@ interface Tab {
   pollMode: PollMode;
   pollIntervalMinutes: number;
   pollTime: string; // "HH:MM" local time, used when pollMode === 'time'
+  soundEnabled: boolean; // play the notification sound when this tab updates
 }
 
 interface TabPollState {
@@ -481,6 +482,7 @@ function initDefaultTabs(): void {
         pollMode: 'interval',
         pollIntervalMinutes: oldSettings.pollIntervalMinutes || 30,
         pollTime: '09:00',
+        soundEnabled: true,
       },
     ]);
     return;
@@ -496,6 +498,7 @@ function initDefaultTabs(): void {
       pollMode: 'interval',
       pollIntervalMinutes: 30,
       pollTime: '09:00',
+      soundEnabled: true,
     },
   ]);
 }

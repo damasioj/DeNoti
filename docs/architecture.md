@@ -61,9 +61,11 @@ interface Tab {
   name: string;                 // display label shown in the tab bar
   sourceType: 'gist' | 'local';
   gistId: string;
-  githubToken: string;          // optional; empty string if not provided
   localFilePath: string;
+  pollMode: 'interval' | 'time';
   pollIntervalMinutes: number;
+  pollTime: string;             // "HH:MM" local time, used when pollMode === 'time'
+  soundEnabled: boolean;        // play the notification sound on new content (default true)
 }
 ```
 
