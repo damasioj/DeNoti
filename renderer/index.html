@@ -183,7 +183,8 @@
         <div class="form-group hidden" id="updates-group">
           <label>Updates</label>
           <button type="button" class="btn btn-secondary" id="check-updates-btn">Check for Updates</button>
-          <small>DeNoti checks automatically; use this to check right now.</small>
+          <button type="button" class="btn btn-primary hidden" id="install-mac-update-btn">Install &amp; Restart</button>
+          <small id="updates-hint"></small>
           <div id="update-check-status" class="save-status hidden"></div>
         </div>
 
@@ -540,7 +541,7 @@
     document.getElementById('settings-btn').addEventListener('click', () => showGlobalSettings());
 
     async function showGlobalSettings() {
-      const [config, version, updatesSupported] = await Promise.all([
+      const [config, version, updateSupport] = await Promise.all([
         api.getConfig(), api.getVersion(), api.getUpdateSupport(),
       ]);
       document.getElementById('global-token').value = config.githubToken || '';
@@ -550,11 +551,16 @@
       document.getElementById('poll-on-startup').checked = config.pollOnStartup ?? true;
       document.getElementById('poll-on-wake').checked = config.pollOnWake ?? true;
       document.getElementById('app-version').textContent = `v${version}`;
-      document.getElementById('updates-group').classList.toggle('hidden', !updatesSupported);
+      document.getElementById('updates-group').classList.toggle('hidden', !updateSupport.supported);
+      document.getElementById('updates-hint').textContent = updateSupport.autoCheck
+        ? 'DeNoti checks automatically; use this to check right now.'
+        : 'Click to check for a new version.';
       const updateStatus = document.getElementById('update-check-status');
       updateStatus.textContent = '';
       updateStatus.className = 'save-status hidden';
       document.getElementById('check-updates-btn').disabled = false;
+      document.getElementById('check-updates-btn').classList.remove('hidden');
+      document.getElementById('install-mac-update-btn').classList.add('hidden');
       const status = document.getElementById('global-save-status');
       status.textContent = '';
       status.className = 'save-status hidden';
@@ -584,6 +590,7 @@
 
     // --- Update checks ---
     const checkUpdatesBtn = document.getElementById('check-updates-btn');
+    const installMacUpdateBtn = document.getElementById('install-mac-update-btn');
 
     function showUpdateStatus(text, variant) {
       const el = document.getElementById('update-check-status');
@@ -597,7 +604,7 @@
       try {
         const res = await api.checkForUpdates();
         if (!res || !res.supported) {
-          showUpdateStatus('Automatic updates aren’t available on this platform.', '');
+          showUpdateStatus("Automatic updates aren't available on this platform.", "");
           checkUpdatesBtn.disabled = false;
         }
         // When supported, the update-status push events below drive the rest.
@@ -607,19 +614,37 @@
       }
     });
 
+    installMacUpdateBtn.addEventListener('click', async () => {
+      installMacUpdateBtn.disabled = true;
+      showUpdateStatus('Installing…', '');
+      try {
+        await api.installMacUpdate();
+      } catch {
+        showUpdateStatus('Install failed. Try again or replace the app manually.', 'error');
+        installMacUpdateBtn.disabled = false;
+      }
+    });
+
     api.onUpdateStatus((data) => {
-      const { status, version, message } = data;
+      const { status, version, message, manual } = data;
       switch (status) {
         case 'available':
           showUpdateStatus(`Update available (v${version}). Downloading…`, '');
           break;
         case 'none':
-          showUpdateStatus('You’re on the latest version.', 'success');
+          showUpdateStatus("You're on the latest version.", "success");
           checkUpdatesBtn.disabled = false;
           break;
         case 'downloaded':
-          showUpdateStatus(`Update v${version} downloaded — restart to apply.`, 'success');
-          checkUpdatesBtn.disabled = false;
+          if (manual) {
+            showUpdateStatus(`Update v${version} downloaded.`, 'success');
+            checkUpdatesBtn.classList.add('hidden');
+            installMacUpdateBtn.classList.remove('hidden');
+            installMacUpdateBtn.disabled = false;
+          } else {
+            showUpdateStatus(`Update v${version} downloaded — restart to apply.`, 'success');
+            checkUpdatesBtn.disabled = false;
+          }
           break;
         case 'error':
           showUpdateStatus('Update check failed' + (message ? `: ${message}` : '.'), 'error');

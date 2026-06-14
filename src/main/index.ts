@@ -2,7 +2,9 @@ import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, dialog, powerMoni
 import * as path from 'path';
 import * as https from 'https';
 import * as fs from 'fs';
-import { randomUUID } from 'crypto';
+import * as os from 'os';
+import { execFile, spawn } from 'child_process';
+import { randomUUID, createHash } from 'crypto';
 import Store from 'electron-store';
 import { autoUpdater } from 'electron-updater';
 
@@ -60,6 +62,7 @@ const startupTabIds = new Set<string>();
 let isQuitting = false;
 let mainObscured = false; // true while the main window is minimized or hidden to tray
 let updateDownloaded = false;
+let macUpdateAppPath: string | null = null;
 let githubAuthPollTimer: NodeJS.Timeout | null = null;
 
 // Public Client ID for the GitHub OAuth App used by the Device Authorization
@@ -77,8 +80,162 @@ function updatesSupported(): boolean {
   return process.platform !== 'darwin' && app.isPackaged;
 }
 
-function sendUpdateStatus(payload: { status: string; version?: string; message?: string }): void {
+function macUpdatesSupported(): boolean {
+  return process.platform === 'darwin'; // dev: always enabled; prod: guarded by app.isPackaged
+}
+
+function sendUpdateStatus(payload: { status: string; version?: string; message?: string; manual?: boolean }): void {
   mainWindow?.webContents.send('update-status', payload);
+}
+
+function isNewerVersion(current: string, latest: string): boolean {
+  // Leading integer of each dotted component; tolerates prerelease suffixes
+  // (e.g. "0.4.0-beta") and missing components, which would otherwise be NaN.
+  const parse = (v: string) => v.replace(/^v/, '').split('.').map((n) => parseInt(n, 10) || 0);
+  const [ca = 0, cb = 0, cc = 0] = parse(current);
+  const [la = 0, lb = 0, lc = 0] = parse(latest);
+  if (la !== ca) return la > ca;
+  if (lb !== cb) return lb > cb;
+  return lc > cc;
+}
+
+function httpsGetFollowRedirects(url: string, redirectsLeft = 5): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const parsed = new URL(url);
+    https.get(
+      { hostname: parsed.hostname, path: parsed.pathname + parsed.search, headers: { 'User-Agent': 'DeNoti' } },
+      (res) => {
+        if ((res.statusCode === 301 || res.statusCode === 302 || res.statusCode === 307 || res.statusCode === 308) && res.headers.location && redirectsLeft > 0) {
+          res.resume();
+          httpsGetFollowRedirects(res.headers.location, redirectsLeft - 1).then(resolve, reject);
+          return;
+        }
+        if (res.statusCode !== 200) {
+          res.resume();
+          reject(new Error(`HTTP ${res.statusCode} from ${url}`));
+          return;
+        }
+        const chunks: Buffer[] = [];
+        res.on('data', (chunk: Buffer) => chunks.push(chunk));
+        res.on('end', () => resolve(Buffer.concat(chunks)));
+        res.on('error', reject);
+      }
+    ).on('error', reject);
+  });
+}
+
+// electron-builder writes a `latest-mac.yml` listing each artifact with a
+// base64-encoded sha512. Extract the digest for a specific asset filename.
+// Matches only indented `files:` entries (`  - url:` / `    sha512:`), never
+// the top-level keys.
+function parseSha512FromYml(yml: string, assetName: string): string | null {
+  let inMatchingFile = false;
+  for (const line of yml.split('\n')) {
+    const urlMatch = line.match(/^\s+-\s+url:\s*(\S+)/);
+    if (urlMatch) {
+      inMatchingFile = urlMatch[1] === assetName;
+      continue;
+    }
+    if (inMatchingFile) {
+      const shaMatch = line.match(/^\s+sha512:\s*(\S+)/);
+      if (shaMatch) return shaMatch[1];
+    }
+  }
+  return null;
+}
+
+// The yml file name varies with arch/config, so scan every `.yml` release
+// asset and return the first sha512 that matches our zip. Returns null if no
+// metadata covers it — the caller fails closed in that case.
+async function expectedSha512(assets: Array<Record<string, unknown>>, assetName: string): Promise<string | null> {
+  const ymlAssets = assets.filter((a) => typeof a.name === 'string' && (a.name as string).endsWith('.yml'));
+  for (const yml of ymlAssets) {
+    try {
+      const text = (await httpsGetFollowRedirects(yml.browser_download_url as string)).toString('utf8');
+      const sha = parseSha512FromYml(text, assetName);
+      if (sha) return sha;
+    } catch {
+      // try the next yml
+    }
+  }
+  return null;
+}
+
+async function macCheckForUpdates(): Promise<void> {
+  try {
+    const releaseJson = await new Promise<string>((resolve, reject) => {
+      https.get(
+        {
+          hostname: 'api.github.com',
+          path: '/repos/damasioj/DeNoti/releases/latest',
+          headers: { 'User-Agent': 'DeNoti', Accept: 'application/vnd.github+json' },
+        },
+        (res) => {
+          if (res.statusCode !== 200) { res.resume(); reject(new Error(`GitHub API: ${res.statusCode}`)); return; }
+          let body = '';
+          res.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+          res.on('end', () => resolve(body));
+          res.on('error', reject);
+        }
+      ).on('error', reject);
+    });
+
+    const release = JSON.parse(releaseJson) as Record<string, unknown>;
+    const latestVersion = ((release.tag_name as string) || '').replace(/^v/, '');
+    if (!latestVersion) { sendUpdateStatus({ status: 'error', message: 'Could not read latest version from GitHub.' }); return; }
+
+    if (!isNewerVersion(app.getVersion(), latestVersion)) {
+      sendUpdateStatus({ status: 'none' });
+      return;
+    }
+
+    sendUpdateStatus({ status: 'available', version: latestVersion });
+
+    const arch = process.arch === 'arm64' ? 'arm64' : 'x64';
+    const assetName = `DeNoti-${latestVersion}-mac-${arch}.zip`;
+    const assets = (release.assets as Array<Record<string, unknown>>) || [];
+    const asset = assets.find((a) => a.name === assetName);
+    if (!asset) {
+      sendUpdateStatus({ status: 'error', message: `Release asset not found: ${assetName}` });
+      return;
+    }
+
+    // Fail closed: never install a binary we can't verify against published metadata.
+    const expectedDigest = await expectedSha512(assets, assetName);
+    if (!expectedDigest) {
+      sendUpdateStatus({ status: 'error', message: 'Cannot verify update integrity — checksum metadata is missing from the release.' });
+      return;
+    }
+
+    const zipBuffer = await httpsGetFollowRedirects(asset.browser_download_url as string);
+
+    const actualDigest = createHash('sha512').update(zipBuffer).digest('base64');
+    if (actualDigest !== expectedDigest) {
+      sendUpdateStatus({ status: 'error', message: 'Update integrity check failed (checksum mismatch). Installation aborted.' });
+      return;
+    }
+
+    const tmpDir = path.join(os.tmpdir(), `denoti-update-${latestVersion}`);
+    fs.mkdirSync(tmpDir, { recursive: true });
+    const zipPath = path.join(tmpDir, assetName);
+    fs.writeFileSync(zipPath, zipBuffer);
+
+    await new Promise<void>((resolve, reject) => {
+      execFile('unzip', ['-q', '-o', zipPath, '-d', tmpDir], (err) => { if (err) reject(err); else resolve(); });
+    });
+
+    const extractedApp = path.join(tmpDir, 'DeNoti.app');
+    // Best-effort quarantine strip — ignores errors since Node's https download doesn't set quarantine
+    await new Promise<void>((resolve) => {
+      execFile('xattr', ['-rd', 'com.apple.quarantine', extractedApp], () => resolve());
+    });
+
+    macUpdateAppPath = extractedApp;
+    updateTrayMenu();
+    sendUpdateStatus({ status: 'downloaded', version: latestVersion, manual: true });
+  } catch (err) {
+    sendUpdateStatus({ status: 'error', message: (err as Error).message });
+  }
 }
 
 function initAutoUpdater(): void {
@@ -227,13 +384,21 @@ function updateTrayMenu(): void {
     }
   }
 
-  if (process.platform !== 'darwin' && app.isPackaged) {
-    menuItems.push(
-      { type: 'separator' },
-      updateDownloaded
-        ? { label: 'Restart to Update', click: () => autoUpdater.quitAndInstall() }
-        : { label: 'Check for Updates', click: () => autoUpdater.checkForUpdates().catch((err) => console.error('[updater]', err.message)) }
-    );
+  if (app.isPackaged) {
+    menuItems.push({ type: 'separator' });
+    if (process.platform === 'darwin') {
+      menuItems.push(
+        macUpdateAppPath
+          ? { label: 'Install Update & Restart', click: () => installMacUpdate() }
+          : { label: 'Check for Updates', click: () => macCheckForUpdates().catch((err) => console.error('[mac-updater]', err.message)) }
+      );
+    } else {
+      menuItems.push(
+        updateDownloaded
+          ? { label: 'Restart to Update', click: () => autoUpdater.quitAndInstall() }
+          : { label: 'Check for Updates', click: () => autoUpdater.checkForUpdates().catch((err) => console.error('[updater]', err.message)) }
+      );
+    }
   }
 
   menuItems.push(
@@ -738,6 +903,48 @@ async function startGithubAuth(): Promise<{ started: boolean; userCode?: string;
   }
 }
 
+function installMacUpdate(): void {
+  if (!macUpdateAppPath) return;
+  // Current .app bundle is 3 levels up from the Electron binary inside it.
+  const appBundle = path.resolve(process.execPath, '..', '..', '..');
+
+  // Paths are passed as argv ($1 = new bundle, $2 = live bundle) rather than
+  // interpolated, so unusual characters in the path can't break the script.
+  // The swap is done with mv (atomic on the same volume) instead of copying
+  // into the existing bundle, which would leave stale files behind. If the
+  // copy or swap fails the original is restored and relaunched.
+  const scriptPath = path.join(os.tmpdir(), 'denoti-install-update.sh');
+  const script = `#!/bin/bash
+NEW="$1"
+DEST="$2"
+STAGING="\${DEST}.new"
+BACKUP="\${DEST}.bak"
+sleep 2
+rm -rf "$STAGING" "$BACKUP"
+if ! cp -Rf "$NEW" "$STAGING"; then
+  open "$DEST"
+  exit 1
+fi
+if mv "$DEST" "$BACKUP" && mv "$STAGING" "$DEST"; then
+  rm -rf "$BACKUP"
+else
+  [ -d "$BACKUP" ] && [ ! -e "$DEST" ] && mv "$BACKUP" "$DEST"
+  rm -rf "$STAGING"
+fi
+open "$DEST"
+`;
+  fs.writeFileSync(scriptPath, script, { mode: 0o755 });
+
+  const child = spawn('/bin/bash', [scriptPath, macUpdateAppPath, appBundle], {
+    detached: true,
+    stdio: 'ignore',
+  });
+  child.unref();
+
+  isQuitting = true;
+  app.quit();
+}
+
 // IPC
 ipcMain.handle('get-version', () => app.getVersion());
 
@@ -838,14 +1045,29 @@ ipcMain.handle('confirm-delete-tab', async (_event, tabName: string) => {
   return response === 0;
 });
 
-ipcMain.handle('get-update-support', () => updatesSupported());
+ipcMain.handle('get-update-support', () => ({
+  supported: updatesSupported() || macUpdatesSupported(),
+  autoCheck: updatesSupported(), // electron-updater checks on launch; mac path is manual-only
+}));
 
 ipcMain.handle('check-for-updates', () => {
+  if (macUpdatesSupported()) {
+    macCheckForUpdates().catch((err: Error) => {
+      sendUpdateStatus({ status: 'error', message: err.message });
+    });
+    return { supported: true };
+  }
   if (!updatesSupported()) return { supported: false };
   autoUpdater.checkForUpdates().catch((err: Error) => {
     sendUpdateStatus({ status: 'error', message: err.message });
   });
   return { supported: true };
+});
+
+ipcMain.handle('install-mac-update', () => {
+  if (!macUpdateAppPath) return { success: false, message: 'No update downloaded.' };
+  installMacUpdate();
+  return { success: true };
 });
 
 ipcMain.handle('start-github-auth', () => startGithubAuth());

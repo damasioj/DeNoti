@@ -28,11 +28,14 @@ contextBridge.exposeInMainWorld('api', {
   confirmDeleteTab: (name: string): Promise<boolean> =>
     ipcRenderer.invoke('confirm-delete-tab', name),
 
-  getUpdateSupport: (): Promise<boolean> =>
+  getUpdateSupport: (): Promise<{ supported: boolean; autoCheck: boolean }> =>
     ipcRenderer.invoke('get-update-support'),
 
   checkForUpdates: (): Promise<{ supported: boolean }> =>
     ipcRenderer.invoke('check-for-updates'),
+
+  installMacUpdate: (): Promise<{ success: boolean; message?: string }> =>
+    ipcRenderer.invoke('install-mac-update'),
 
   onUpdateStatus: (callback: (data: unknown) => void): void => {
     ipcRenderer.on('update-status', (_event, data) => callback(data));

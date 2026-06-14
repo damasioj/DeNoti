@@ -157,8 +157,9 @@ All communication uses Electron's `ipcMain.handle` / `ipcRenderer.invoke` (reque
 | `poll-now` | `tabId?: string` | `void` | Poll one tab or all if omitted |
 | `pick-file` | — | `string \| null` | Opens native file-picker dialog |
 | `confirm-delete-tab` | `name: string` | `boolean` | Native warning dialog; resolves `true` only if the user confirms deletion |
-| `get-update-support` | — | `boolean` | Whether auto-updates apply here (packaged, non-macOS) |
+| `get-update-support` | — | `boolean` | Whether updates are supported here (packaged on any platform) |
 | `check-for-updates` | — | `{ supported: boolean }` | Triggers an update check; progress arrives via `update-status` |
+| `install-mac-update` | — | `{ success: boolean }` | macOS only: runs install script, quits app, relaunches updated version |
 | `start-github-auth` | — | `{ started, userCode?, verificationUri?, message? }` | Begins the GitHub OAuth device flow, opens the browser, starts polling |
 | `cancel-github-auth` | — | `void` | Stops the in-flight device-flow polling |
 | `toast-dismiss` | — | `void` | macOS toast asks to hide itself (after auto-dismiss) |
@@ -171,7 +172,7 @@ All communication uses Electron's `ipcMain.handle` / `ipcRenderer.invoke` (reque
 | `tab-content` | `{ tabId, content, contentType, updatedAt, description, source }` | New content available for a tab |
 | `tab-error` | `{ tabId, message }` | Polling error for a tab |
 | `navigate` | `'settings'` | Tray menu asked to open settings |
-| `update-status` | `{ status: 'available' \| 'none' \| 'downloaded' \| 'error', version?, message? }` | Auto-updater progress for the settings UI |
+| `update-status` | `{ status: 'available' \| 'none' \| 'downloaded' \| 'error', version?, message?, manual? }` | Auto-updater progress; `manual: true` on macOS `downloaded` means user must click Install & Restart |
 | `github-auth-status` | `{ status: 'connected' \| 'error', username?, message? }` | GitHub device-flow result for the settings UI |
 | `navigate-tab` | `tabId: string` | Switch the main window to a tab (from a clicked notification/toast) |
 | `toast-show` | `{ tabId, name }` | Show the macOS custom toast for a tab update |
