@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: https:; connect-src https://api.github.com" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: https:; media-src 'self'; connect-src https://api.github.com" />
   <title>DeNoti</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.9.0/styles/github-dark.min.css" />
   <link rel="stylesheet" href="styles.css" />
@@ -226,6 +226,11 @@
     let currentSource = 'gist';
     let currentPollMode = 'interval';
 
+    // Played when new content is delivered to a tab (issue #2). Constructing the
+    // Audio object never throws if the file is missing — only play() rejects,
+    // and that rejection is swallowed where it's called.
+    const notificationSound = new Audio('../assets/notification_ping.mp3');
+
     // --- Helpers ---
     function showView(view) {
       document.getElementById('content-view').classList.toggle('hidden', view !== 'content');
@@ -377,6 +382,8 @@
     api.onTabContent((data) => {
       const { tabId, content, updatedAt, description } = data;
       tabContents[tabId] = { content, updatedAt, description };
+      notificationSound.currentTime = 0;
+      notificationSound.play().catch(() => {}); // ignore missing-file / autoplay errors
       if (tabId === activeTabId) {
         renderActiveContent();
       } else {
