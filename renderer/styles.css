@@ -48,7 +48,7 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 20px;
+  padding: 10px 14px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
@@ -56,9 +56,9 @@ html, body {
   user-select: none;
 }
 
-/* macOS: clear the traffic-light buttons (hiddenInset positions them at x=16) */
+/* macOS: clear traffic lights (end at ~x68) plus generous spacing before title */
 body[data-platform="darwin"] .header {
-  padding-left: 82px;
+  padding-left: 96px;
 }
 
 .header-left {
@@ -70,14 +70,14 @@ body[data-platform="darwin"] .header {
 }
 
 .logo {
-  font-size: 18px;
+  font-size: 14px;
   font-weight: 700;
   color: var(--accent);
   letter-spacing: 1px;
 }
 
 .subtitle {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-dim);
   max-width: 300px;
   overflow: hidden;
@@ -88,13 +88,13 @@ body[data-platform="darwin"] .header {
 .header-right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 14px;
 }
 
 /* Separator between app buttons and window controls */
 .wc-sep {
   width: 1px;
-  height: 20px;
+  height: 14px;
   background: var(--border);
   margin: 0 4px;
   flex-shrink: 0;
@@ -109,8 +109,8 @@ body[data-platform="darwin"] .header {
 }
 
 .wc-btn {
-  width: 32px;
-  height: 32px;
+  width: 22px;
+  height: 22px;
   background: transparent;
   border: none;
   color: var(--text-dim);
@@ -149,17 +149,18 @@ body[data-platform="darwin"] .header {
 .btn:active { opacity: 0.8; }
 
 .btn-icon {
-  width: 32px;
-  height: 32px;
-  background: var(--surface2);
-  color: var(--text);
+  width: auto;
+  height: auto;
+  background: none;
+  color: var(--text-dim);
   font-size: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  padding: 0;
+  line-height: 1;
 }
 
-.btn-icon:hover { background: var(--accent2); }
+.btn-icon:hover { background: none; color: var(--text); }
+
+#settings-btn { font-size: 22px; }
 
 .btn-primary {
   padding: 10px 24px;

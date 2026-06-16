@@ -293,7 +293,7 @@ function createWindow(): void {
     title: 'DeNoti',
     backgroundColor: '#16213e',
     titleBarStyle: isMac ? 'hiddenInset' : 'hidden',
-    trafficLightPosition: isMac ? { x: 16, y: 14 } : undefined,
+    trafficLightPosition: isMac ? { x: 16, y: 13 } : undefined,
   });
 
   mainWindow.loadFile(path.join(app.getAppPath(), 'renderer/index.html'));
