@@ -54,6 +54,16 @@ This document is the source of truth for cutting a DeNoti release. Every release
 
 7. **Leave the release as a draft** for review. Do not publish it without explicit approval — publishing is a visible, user-facing action.
 
+8. **When approved, publish it as the latest release — not a prerelease.** This step is required, not optional: `electron-updater`'s GitHub provider resolves updates via `/releases/latest`, and GitHub excludes both drafts *and* prereleases from that endpoint. A release left as draft or prerelease is invisible to the auto-updater on every platform, even though it's reachable by URL.
+   ```bash
+   gh release edit vX.Y.Z --repo damasioj/DeNoti --draft=false --prerelease=false --latest
+   ```
+   Verify it took effect before considering the release done:
+   ```bash
+   gh release list --repo damasioj/DeNoti --limit 1 --json tagName,isDraft,isPrerelease,isLatest
+   ```
+   Expect `isDraft: false`, `isPrerelease: false`, `isLatest: true`. If `isLatest` is false, the auto-updater will not find this release no matter what else is correct.
+
 ## Release notes format
 
 Follow the structure used in `v0.2.1` (and every release since). Sections are omitted if empty — don't include a heading with no bullets under it.
