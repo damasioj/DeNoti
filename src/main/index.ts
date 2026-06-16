@@ -305,6 +305,15 @@ function createWindow(): void {
     });
   }
 
+  // Block all reload shortcuts so a hard refresh can't wipe renderer state.
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown') return;
+    const ctrl = input.control || input.meta;
+    if ((ctrl && input.key.toLowerCase() === 'r') || input.key === 'F5') {
+      event.preventDefault();
+    }
+  });
+
   mainWindow.webContents.once('did-finish-load', () => {
     mainWindow?.show(); // show on launch — new content no longer force-shows the window
     if (store.get('config').pollOnStartup ?? true) checkAllTabs();
@@ -525,17 +534,17 @@ function checkAllTabs(): void {
   store.get('tabs').forEach((tab) => checkTabForUpdates(tab.id));
 }
 
-function checkTabForUpdates(tabId: string): void {
+function checkTabForUpdates(tabId: string, force = false): void {
   const tab = store.get('tabs').find((t) => t.id === tabId);
   if (!tab) return;
   if (tab.sourceType === 'local') {
-    checkLocalFile(tab);
+    checkLocalFile(tab, force);
   } else {
-    fetchGist(tab);
+    fetchGist(tab, force);
   }
 }
 
-function checkLocalFile(tab: Tab): void {
+function checkLocalFile(tab: Tab, force = false): void {
   const filePath = tab.localFilePath.trim();
 
   if (!filePath) {
@@ -553,7 +562,7 @@ function checkLocalFile(tab: Tab): void {
 
   const newUpdatedAt = String(stat.mtimeMs);
   const isStartup = startupTabIds.delete(tab.id);
-  if (!isStartup && newUpdatedAt === getTabState(tab.id).lastUpdatedAt) return;
+  if (!isStartup && !force && newUpdatedAt === getTabState(tab.id).lastUpdatedAt) return;
 
   let content: string;
   try {
@@ -590,7 +599,7 @@ function buildGistContent(gist: Record<string, unknown>): { content: string; con
   };
 }
 
-function fetchGist(tab: Tab): void {
+function fetchGist(tab: Tab, force = false): void {
   if (!tab.gistId.trim()) {
     sendError(tab.id, 'No Gist ID configured. Edit tab settings.');
     return;
@@ -606,7 +615,7 @@ function fetchGist(tab: Tab): void {
     'X-GitHub-Api-Version': '2022-11-28',
   };
   if (githubToken) headers['Authorization'] = `Bearer ${githubToken}`;
-  if (lastEtag && !isStartup) headers['If-None-Match'] = lastEtag;
+  if (lastEtag && !isStartup && !force) headers['If-None-Match'] = lastEtag;
 
   const req = https.request(
     {
@@ -641,7 +650,7 @@ function fetchGist(tab: Tab): void {
 
           if (etag) setTabState(tab.id, { lastEtag: etag });
 
-          if (isStartup || newUpdatedAt !== lastUpdatedAt) {
+          if (isStartup || force || newUpdatedAt !== lastUpdatedAt) {
             setTabState(tab.id, { lastUpdatedAt: newUpdatedAt });
             const { content, contentType } = buildGistContent(gist);
             deliverContent(tab.id, {
@@ -1012,9 +1021,9 @@ ipcMain.handle('set-tabs', (_event, newTabs: Tab[]) => {
 
 ipcMain.handle('poll-now', (_event, tabId?: string) => {
   if (tabId) {
-    checkTabForUpdates(tabId);
+    checkTabForUpdates(tabId, true);
   } else {
-    checkAllTabs();
+    store.get('tabs').forEach((tab) => checkTabForUpdates(tab.id, true));
   }
 });
 
