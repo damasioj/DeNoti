@@ -67,6 +67,26 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.on('navigate-tab', (_event, tabId) => callback(tabId));
   },
 
+  getPlatform: (): Promise<string> =>
+    ipcRenderer.invoke('get-platform'),
+
+  windowMinimize: (): Promise<void> =>
+    ipcRenderer.invoke('window-minimize'),
+
+  windowMaximize: (): Promise<void> =>
+    ipcRenderer.invoke('window-maximize'),
+
+  windowClose: (): Promise<void> =>
+    ipcRenderer.invoke('window-close'),
+
+  onWindowMaximized: (callback: () => void): void => {
+    ipcRenderer.on('window-maximized', callback);
+  },
+
+  onWindowUnmaximized: (callback: () => void): void => {
+    ipcRenderer.on('window-unmaximized', callback);
+  },
+
   onToastShow: (callback: (data: unknown) => void): void => {
     ipcRenderer.on('toast-show', (_event, data) => callback(data));
   },

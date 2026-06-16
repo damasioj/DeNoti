@@ -277,6 +277,7 @@ function initAutoUpdater(): void {
 }
 
 function createWindow(): void {
+  const isMac = process.platform === 'darwin';
   mainWindow = new BrowserWindow({
     width: 900,
     height: 650,
@@ -290,7 +291,9 @@ function createWindow(): void {
       nodeIntegration: false,
     },
     title: 'DeNoti',
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#16213e',
+    titleBarStyle: isMac ? 'hiddenInset' : 'hidden',
+    trafficLightPosition: isMac ? { x: 16, y: 14 } : undefined,
   });
 
   mainWindow.loadFile(path.join(app.getAppPath(), 'renderer/index.html'));
@@ -334,6 +337,9 @@ function createWindow(): void {
   mainWindow.on('show', () => { mainObscured = false; });
   mainWindow.on('restore', () => { mainObscured = false; });
   mainWindow.on('focus', () => { mainObscured = false; });
+
+  mainWindow.on('maximize', () => mainWindow?.webContents.send('window-maximized'));
+  mainWindow.on('unmaximize', () => mainWindow?.webContents.send('window-unmaximized'));
 }
 
 function createTray(): void {
@@ -1088,6 +1094,17 @@ ipcMain.handle('cancel-github-auth', () => {
   }
 });
 
+ipcMain.handle('get-platform', () => process.platform);
+
+ipcMain.handle('window-minimize', () => mainWindow?.minimize());
+
+ipcMain.handle('window-maximize', () => {
+  if (mainWindow?.isMaximized()) mainWindow.unmaximize();
+  else mainWindow?.maximize();
+});
+
+ipcMain.handle('window-close', () => mainWindow?.close());
+
 ipcMain.handle('toast-dismiss', () => {
   toastWindow?.hide();
 });
@@ -1100,6 +1117,7 @@ ipcMain.handle('toast-open-tab', (_event, tabId: string) => {
 
 // Lifecycle
 app.on('ready', () => {
+  Menu.setApplicationMenu(null);
   if (app.dock && !app.isPackaged) {
     app.dock.setIcon(path.join(app.getAppPath(), 'assets/robot-bell.png'));
   }

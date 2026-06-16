@@ -22,6 +22,18 @@
         <button class="btn btn-icon" id="theme-btn" title="Toggle theme">◑</button>
         <button class="btn btn-icon" id="poll-btn" title="Poll active tab">&#8635;</button>
         <button class="btn btn-icon" id="settings-btn" title="Global settings">&#9881;</button>
+        <div class="wc-sep hidden" id="wc-sep"></div>
+        <div class="window-controls hidden" id="window-controls">
+          <button class="wc-btn" id="wc-minimize" title="Minimize">
+            <svg width="10" height="1" viewBox="0 0 10 1"><rect width="10" height="1" fill="currentColor"/></svg>
+          </button>
+          <button class="wc-btn" id="wc-maximize" title="Maximize">
+            <svg id="wc-max-icon" width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1"><rect x="0.5" y="0.5" width="9" height="9"/></svg>
+          </button>
+          <button class="wc-btn wc-close" id="wc-close" title="Close">
+            <svg width="10" height="10" viewBox="0 0 10 10"><line x1="0" y1="0" x2="10" y2="10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><line x1="10" y1="0" x2="0" y2="10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          </button>
+        </div>
       </div>
     </header>
 
@@ -740,8 +752,35 @@
       }
     });
 
+    // --- Window controls (Windows / Linux only) ---
+    async function initWindowControls() {
+      const platform = await api.getPlatform();
+      document.body.dataset.platform = platform;
+      if (platform === 'darwin') return;
+
+      document.getElementById('wc-sep').classList.remove('hidden');
+      document.getElementById('window-controls').classList.remove('hidden');
+
+      const maxIcon = document.getElementById('wc-max-icon');
+      const MAXIMIZE_PATH = '<rect x="0.5" y="0.5" width="9" height="9"/>';
+      const RESTORE_PATH = '<rect x="2" y="0" width="8" height="8"/><polyline points="0,2 0,10 8,10"/>';
+
+      function setMaxIcon(maximized) {
+        maxIcon.innerHTML = maximized ? RESTORE_PATH : MAXIMIZE_PATH;
+        document.getElementById('wc-maximize').title = maximized ? 'Restore' : 'Maximize';
+      }
+
+      api.onWindowMaximized(() => setMaxIcon(true));
+      api.onWindowUnmaximized(() => setMaxIcon(false));
+
+      document.getElementById('wc-minimize').addEventListener('click', () => api.windowMinimize());
+      document.getElementById('wc-maximize').addEventListener('click', () => api.windowMaximize());
+      document.getElementById('wc-close').addEventListener('click', () => api.windowClose());
+    }
+
     // --- Init ---
     async function init() {
+      await initWindowControls();
       tabs = await api.getTabs();
       if (tabs.length > 0) activeTabId = tabs[0].id;
       renderTabBar();
