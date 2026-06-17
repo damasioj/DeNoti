@@ -801,3 +801,88 @@ input[type="range"]::-webkit-slider-thumb {
   justify-content: center;
   margin-top: 20px;
 }
+
+/* Import Gists modal — wider, left-aligned list */
+.modal-wide {
+  max-width: 480px;
+  text-align: left;
+}
+
+.modal-wide p {
+  text-align: left;
+}
+
+.modal-wide .form-actions {
+  justify-content: flex-start;
+}
+
+.import-gists-list {
+  max-height: 280px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 16px;
+  background: var(--bg);
+}
+
+.import-gists-list::-webkit-scrollbar { width: 5px; }
+.import-gists-list::-webkit-scrollbar-track { background: transparent; }
+.import-gists-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+.import-gist-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.import-gist-item:last-child { border-bottom: none; }
+
+.import-gist-item:hover { background: var(--surface2); }
+
+.import-gist-item input[type="checkbox"] {
+  margin-top: 3px;
+  flex-shrink: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.import-gist-item label {
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-weight: normal;
+  margin-bottom: 0;
+}
+
+.import-gist-item label strong {
+  font-size: 13px;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.import-gist-item label small {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 0;
+}
+
+/* Gist URL row read-only input */
+#gist-url-display {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  color: var(--text-dim);
+  flex: 1;
+}
+
+/* Auth hint link inside create-gist-row */
+#create-gist-auth-hint a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+#create-gist-auth-hint a:hover { text-decoration: underline; }

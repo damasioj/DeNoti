@@ -308,6 +308,21 @@ function createWindow(): void {
     });
   }
 
+  // Prevent target="_blank" / window.open from spawning new Electron windows.
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) shell.openExternal(url).catch(() => {});
+    return { action: 'deny' };
+  });
+
+  // Prevent in-frame navigation (e.g. a plain <a href> that wasn't intercepted
+  // by the renderer). Allow only the initial loadFile of index.html.
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (url !== mainWindow!.webContents.getURL()) {
+      event.preventDefault();
+      if (/^https?:\/\//i.test(url)) shell.openExternal(url).catch(() => {});
+    }
+  });
+
   // Block all reload shortcuts so a hard refresh can't wipe renderer state.
   mainWindow.webContents.on('before-input-event', (event, input) => {
     if (input.type !== 'keyDown') return;
@@ -918,6 +933,90 @@ async function startGithubAuth(): Promise<{ started: boolean; userCode?: string;
   }
 }
 
+function githubApiRequest(
+  method: 'GET' | 'POST',
+  apiPath: string,
+  token: string,
+  body?: string
+): Promise<{ status: number; data: unknown }> {
+  return new Promise((resolve, reject) => {
+    const headers: Record<string, string | number> = {
+      Accept: 'application/vnd.github+json',
+      Authorization: `Bearer ${token}`,
+      'User-Agent': 'DeNoti',
+      'X-GitHub-Api-Version': '2022-11-28',
+    };
+    if (body) {
+      headers['Content-Type'] = 'application/json';
+      headers['Content-Length'] = Buffer.byteLength(body);
+    }
+    const req = https.request(
+      { hostname: 'api.github.com', path: apiPath, method, headers },
+      (res) => {
+        let raw = '';
+        res.on('data', (chunk: Buffer) => { raw += chunk.toString(); });
+        res.on('end', () => {
+          try {
+            resolve({ status: res.statusCode ?? 0, data: JSON.parse(raw) });
+          } catch {
+            resolve({ status: res.statusCode ?? 0, data: null });
+          }
+        });
+      }
+    );
+    req.on('error', reject);
+    if (body) req.write(body);
+    req.end();
+  });
+}
+
+async function createGist(name: string, filename: string): Promise<{ success: boolean; gistId?: string; gistUrl?: string; message?: string }> {
+  const { githubToken } = store.get('config');
+  if (!githubToken) {
+    return { success: false, message: 'Not connected to GitHub. Connect in Global Settings first.' };
+  }
+  const body = JSON.stringify({
+    description: name,
+    public: false,
+    files: { [filename]: { content: `# ${name}\n\n*Waiting for content…*\n` } },
+  });
+  try {
+    const { status, data } = await githubApiRequest('POST', '/gists', githubToken, body);
+    if (status !== 201) {
+      const msg = (data as Record<string, unknown>)?.message as string | undefined;
+      return { success: false, message: msg || `GitHub API returned ${status}.` };
+    }
+    const gist = data as Record<string, unknown>;
+    return { success: true, gistId: gist.id as string, gistUrl: gist.html_url as string };
+  } catch (err) {
+    return { success: false, message: (err as Error).message };
+  }
+}
+
+async function importGists(): Promise<{ success: boolean; gists?: Array<{ id: string; description: string; filename: string }>; message?: string }> {
+  const { githubToken } = store.get('config');
+  if (!githubToken) {
+    return { success: false, message: 'Not connected to GitHub. Connect in Global Settings first.' };
+  }
+  try {
+    const { status, data } = await githubApiRequest('GET', '/gists?per_page=100', githubToken);
+    if (status !== 200) {
+      return { success: false, message: `GitHub API returned ${status}.` };
+    }
+    const list = data as Array<Record<string, unknown>>;
+    return {
+      success: true,
+      gists: list.map((g) => ({
+        id: g.id as string,
+        description: (g.description as string) || '',
+        filename: Object.keys(g.files as Record<string, unknown>)[0] || '',
+      })),
+    };
+  } catch (err) {
+    return { success: false, message: (err as Error).message };
+  }
+}
+
 function installMacUpdate(): void {
   if (!macUpdateAppPath) return;
   // Current .app bundle is 3 levels up from the Electron binary inside it.
@@ -1085,6 +1184,12 @@ ipcMain.handle('install-mac-update', () => {
   return { success: true };
 });
 
+ipcMain.handle('create-gist', (_event, opts: { name: string; filename: string }) =>
+  createGist(opts.name, opts.filename)
+);
+
+ipcMain.handle('import-gists', () => importGists());
+
 ipcMain.handle('start-github-auth', () => startGithubAuth());
 
 ipcMain.handle('cancel-github-auth', () => {
@@ -1092,6 +1197,10 @@ ipcMain.handle('cancel-github-auth', () => {
     clearTimeout(githubAuthPollTimer);
     githubAuthPollTimer = null;
   }
+});
+
+ipcMain.handle('open-external', (_event, url: string) => {
+  shell.openExternal(url).catch((err) => console.error('[open-external]', err.message));
 });
 
 ipcMain.handle('get-platform', () => process.platform);

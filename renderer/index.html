@@ -90,7 +90,20 @@
         </div>
 
         <div id="gist-fields">
-          <div class="form-group">
+          <div class="form-group hidden" id="create-gist-row">
+            <div class="checkbox-row">
+              <input type="checkbox" id="create-as-gist" />
+              <label for="create-as-gist">
+                <strong>Create a new Gist</strong>
+                <small>DeNoti will create a new private GitHub Gist for this tab.</small>
+              </label>
+            </div>
+            <small id="create-gist-auth-hint" class="hidden">
+              <a href="#" id="create-gist-settings-link">Connect GitHub in Settings</a> to enable this option.
+            </small>
+          </div>
+
+          <div class="form-group" id="gist-id-row">
             <label for="gist-id">GitHub Gist ID</label>
             <input type="text" id="gist-id" placeholder="e.g. abc123def456..." />
             <small>The ID from your Gist URL: gist.github.com/user/<strong>GIST_ID</strong></small>
@@ -153,6 +166,18 @@
         </div>
 
         <div id="save-status" class="save-status hidden"></div>
+
+        <div class="form-group hidden" id="gist-url-row">
+          <label>Share with your LLM</label>
+          <div class="interval-row">
+            <input type="text" id="gist-url-display" readonly placeholder="Gist URL will appear here" />
+            <button type="button" class="btn btn-secondary" id="copy-gist-url-btn">Copy URL</button>
+          </div>
+          <small>Point your LLM routine to this URL — DeNoti will poll it automatically for updates.</small>
+          <div class="form-actions" style="margin-top:16px">
+            <button class="btn btn-primary hidden" id="gist-close-btn">Close</button>
+          </div>
+        </div>
       </div>
     </main>
 
@@ -170,6 +195,10 @@
           </div>
           <input type="password" id="global-token" placeholder="…or paste a token (ghp_…)" />
           <small>Connect to authorize in your browser — no token to copy. Or paste a personal access token with the <strong>gist</strong> scope. Required for private gists; raises rate limits for public ones.</small>
+          <div style="margin-top:12px">
+            <button type="button" class="btn btn-secondary" id="import-gists-btn">&#8595; Import Gists from GitHub</button>
+          </div>
+          <small style="margin-top:8px">Add tabs for Gists already on your account.</small>
         </div>
 
         <div class="form-group">
@@ -211,6 +240,20 @@
 
     <!-- Error toast -->
     <div class="toast hidden" id="error-toast"></div>
+
+    <!-- Import Gists modal -->
+    <div class="modal-overlay hidden" id="import-gists-modal">
+      <div class="modal modal-wide">
+        <h3>Import Gists</h3>
+        <p id="import-gists-hint">Loading your gists&hellip;</p>
+        <div id="import-gists-list" class="import-gists-list"></div>
+        <div class="form-actions">
+          <button type="button" class="btn btn-primary" id="import-confirm-btn">Add Selected</button>
+          <button type="button" class="btn btn-secondary" id="import-cancel-btn">Cancel</button>
+        </div>
+        <div id="import-status" class="save-status hidden"></div>
+      </div>
+    </div>
 
     <!-- GitHub device-flow modal -->
     <div class="modal-overlay hidden" id="github-auth-modal">
@@ -397,14 +440,76 @@
       lastUpdated.textContent = 'Updated ' + new Date(updatedAt).toLocaleString();
       statusText.textContent = 'Latest report';
       contentArea.innerHTML = contentType === 'html' ? content : marked.parse(content);
+      contentArea.scrollTop = 0;
       if (contentType !== 'html') {
         contentArea.querySelectorAll('pre code').forEach((el) => hljs.highlightElement(el));
       }
     }
 
+    // Intercept link clicks in the content area.
+    // - http/https links open in the system browser.
+    // - Local file links (relative or absolute) open as a new DeNoti tab, or switch
+    //   to an existing tab if the same file is already tracked.
+    document.getElementById('content-area').addEventListener('click', async (e) => {
+      const a = e.target.closest('a');
+      if (!a) return;
+      const href = a.getAttribute('href');
+      if (!href) return;
+
+      e.preventDefault();
+
+      if (href.startsWith('http://') || href.startsWith('https://')) {
+        api.openExternal(href);
+        return;
+      }
+
+      // Resolve local path — relative links are resolved against the current tab's source file.
+      let filePath;
+      if (href.startsWith('file://')) {
+        filePath = decodeURIComponent(new URL(href).pathname);
+      } else if (href.startsWith('/')) {
+        filePath = href;
+      } else {
+        const src = tabContents[activeTabId]?.source;
+        if (!src) return;
+        filePath = decodeURIComponent(new URL(href, 'file://' + src).pathname);
+      }
+
+      // Switch to the tab if the file is already tracked.
+      const existing = tabs.find((t) => t.sourceType === 'local' && t.localFilePath === filePath);
+      if (existing) {
+        setActiveTab(existing.id);
+        showView('content');
+        return;
+      }
+
+      // Otherwise open it as a new tab.
+      const newTab = {
+        id: crypto.randomUUID(),
+        name: filePath.split('/').pop() || 'File',
+        sourceType: 'local',
+        gistId: '',
+        localFilePath: filePath,
+        pollMode: 'interval',
+        pollIntervalMinutes: 30,
+        pollTime: '09:00',
+        soundEnabled: true,
+      };
+      const newTabs = [...tabs, newTab];
+      try {
+        await api.setTabs(newTabs);
+        tabs = newTabs;
+        activeTabId = newTab.id;
+        renderTabBar();
+        renderActiveContent();
+        updateTabBarActions();
+        showView('content');
+      } catch { /* silently ignore */ }
+    });
+
     api.onTabContent((data) => {
-      const { tabId, content, updatedAt, description } = data;
-      tabContents[tabId] = { content, updatedAt, description };
+      const { tabId, content, contentType, updatedAt, description, source } = data;
+      tabContents[tabId] = { content, contentType, updatedAt, description, source };
       const tab = tabs.find((t) => t.id === tabId);
       if (tab?.soundEnabled ?? true) {
         notificationSound.currentTime = 0;
@@ -523,6 +628,26 @@
       if (picked) document.getElementById('local-path').value = picked;
     });
 
+    document.getElementById('create-as-gist').addEventListener('change', function () {
+      document.getElementById('gist-id-row').classList.toggle('hidden', this.checked);
+    });
+
+    document.getElementById('create-gist-settings-link').addEventListener('click', (e) => {
+      e.preventDefault();
+      showGlobalSettings();
+    });
+
+    document.getElementById('copy-gist-url-btn').addEventListener('click', () => {
+      const url = document.getElementById('gist-url-display').value;
+      if (navigator.clipboard && url) {
+        navigator.clipboard.writeText(url).catch(() => {});
+        document.getElementById('copy-gist-url-btn').textContent = 'Copied!';
+        setTimeout(() => { document.getElementById('copy-gist-url-btn').textContent = 'Copy URL'; }, 2000);
+      }
+    });
+
+    document.getElementById('gist-close-btn').addEventListener('click', () => showView('content'));
+
     // --- Tab settings panel ---
     document.getElementById('cancel-btn').addEventListener('click', () => showView('content'));
 
@@ -541,6 +666,30 @@
       document.getElementById('poll-time').value = tab ? (tab.pollTime ?? '09:00') : '09:00';
       document.getElementById('tab-sound-enabled').checked = tab ? (tab.soundEnabled ?? true) : true;
       setSource(tab ? tab.sourceType : 'gist');
+
+      // Reset gist URL row and close button
+      document.getElementById('gist-url-row').classList.add('hidden');
+      document.getElementById('gist-url-display').value = '';
+      document.getElementById('gist-close-btn').classList.add('hidden');
+
+      // Create-as-Gist row: new-tab mode only
+      const createGistRow = document.getElementById('create-gist-row');
+      const createAsGist = document.getElementById('create-as-gist');
+      const createGistAuthHint = document.getElementById('create-gist-auth-hint');
+      const gistIdRow = document.getElementById('gist-id-row');
+
+      if (!tab) {
+        createGistRow.classList.remove('hidden');
+        const config = await api.getConfig();
+        const hasToken = !!(config.githubToken);
+        createAsGist.disabled = !hasToken;
+        createAsGist.checked = hasToken;
+        createGistAuthHint.classList.toggle('hidden', hasToken);
+        gistIdRow.classList.toggle('hidden', hasToken);
+      } else {
+        createGistRow.classList.add('hidden');
+        gistIdRow.classList.remove('hidden');
+      }
 
       const saveStatus = document.getElementById('save-status');
       saveStatus.textContent = '';
@@ -665,6 +814,110 @@
       }
     });
 
+    // --- Import Gists modal ---
+    const importGistsModal = document.getElementById('import-gists-modal');
+
+    document.getElementById('import-gists-btn').addEventListener('click', async () => {
+      const hint = document.getElementById('import-gists-hint');
+      const list = document.getElementById('import-gists-list');
+      const importStatus = document.getElementById('import-status');
+
+      hint.textContent = 'Loading your gists…';
+      list.innerHTML = '';
+      importStatus.className = 'save-status hidden';
+      document.getElementById('import-confirm-btn').disabled = false;
+      importGistsModal.classList.remove('hidden');
+
+      const result = await api.importGists();
+      if (!result.success) {
+        hint.textContent = result.message || 'Failed to load gists.';
+        return;
+      }
+
+      const existingGistIds = new Set(
+        tabs.filter((t) => t.sourceType === 'gist').map((t) => t.gistId)
+      );
+      const available = result.gists.filter((g) => !existingGistIds.has(g.id));
+
+      if (available.length === 0) {
+        hint.textContent = result.gists.length > 0
+          ? 'All your gists are already tracked as tabs.'
+          : 'No gists found on your account.';
+        return;
+      }
+
+      hint.textContent = `Select gists to add as tabs (${available.length} available):`;
+      available.forEach((g) => {
+        const row = document.createElement('div');
+        row.className = 'import-gist-item';
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.id = `import-gist-${g.id}`;
+        cb.dataset.gistId = g.id;
+        cb.dataset.description = g.description;
+        cb.dataset.filename = g.filename;
+        const lbl = document.createElement('label');
+        lbl.htmlFor = cb.id;
+        const strong = document.createElement('strong');
+        strong.textContent = g.description || g.filename || g.id;
+        const small = document.createElement('small');
+        small.textContent = g.filename;
+        lbl.appendChild(strong);
+        if (g.filename) lbl.appendChild(small);
+        row.appendChild(cb);
+        row.appendChild(lbl);
+        list.appendChild(row);
+      });
+    });
+
+    document.getElementById('import-cancel-btn').addEventListener('click', () => {
+      importGistsModal.classList.add('hidden');
+    });
+
+    document.getElementById('import-confirm-btn').addEventListener('click', async () => {
+      const importStatus = document.getElementById('import-status');
+      const checked = Array.from(
+        document.querySelectorAll('#import-gists-list input[type=checkbox]:checked')
+      );
+      if (checked.length === 0) {
+        importStatus.textContent = 'Select at least one gist.';
+        importStatus.className = 'save-status error';
+        return;
+      }
+
+      document.getElementById('import-confirm-btn').disabled = true;
+      importStatus.textContent = `Adding ${checked.length} tab${checked.length > 1 ? 's' : ''}…`;
+      importStatus.className = 'save-status';
+
+      const newGistTabs = checked.map((cb) => ({
+        id: crypto.randomUUID(),
+        name: (cb.dataset.description || cb.dataset.filename || 'Gist').slice(0, 60) || 'Gist',
+        sourceType: 'gist',
+        gistId: cb.dataset.gistId,
+        localFilePath: '',
+        pollMode: 'interval',
+        pollIntervalMinutes: 30,
+        pollTime: '09:00',
+        soundEnabled: true,
+      }));
+
+      const newTabs = [...tabs, ...newGistTabs];
+      try {
+        await api.setTabs(newTabs);
+        tabs = newTabs;
+        activeTabId = newGistTabs[newGistTabs.length - 1].id;
+        renderTabBar();
+        renderActiveContent();
+        updateTabBarActions();
+        importGistsModal.classList.add('hidden');
+        showView('content');
+      } catch {
+        importStatus.textContent = '✗ Failed to add tabs.';
+        importStatus.className = 'save-status error';
+        document.getElementById('import-confirm-btn').disabled = false;
+      }
+    });
+
     // --- GitHub connect (OAuth device flow) ---
     const githubModal = document.getElementById('github-auth-modal');
     const deviceCodeEl = document.getElementById('device-code');
@@ -718,11 +971,38 @@
 
     document.getElementById('save-btn').addEventListener('click', async () => {
       const name = document.getElementById('tab-name').value.trim() || 'Tab';
+      const status = document.getElementById('save-status');
+      status.textContent = 'Saving…';
+      status.className = 'save-status';
+
+      let gistId = document.getElementById('gist-id').value.trim();
+      let createdGistUrl = null;
+
+      const createAsGist = document.getElementById('create-as-gist');
+      const shouldCreateGist = !editingTabId
+        && currentSource === 'gist'
+        && createAsGist.checked
+        && !createAsGist.disabled;
+
+      if (shouldCreateGist) {
+        status.textContent = 'Creating Gist…';
+        const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'tab';
+        const result = await api.createGist({ name, filename: slug + '.md' });
+        if (!result.success) {
+          status.textContent = '✗ ' + (result.message || 'Failed to create Gist.');
+          status.className = 'save-status error';
+          return;
+        }
+        gistId = result.gistId;
+        createdGistUrl = result.gistUrl;
+        status.textContent = 'Saving…';
+      }
+
       const tabData = {
         id: editingTabId || crypto.randomUUID(),
         name,
         sourceType: currentSource,
-        gistId: document.getElementById('gist-id').value.trim(),
+        gistId,
         localFilePath: document.getElementById('local-path').value.trim(),
         pollMode: currentPollMode,
         pollIntervalMinutes: getIntervalMinutes(),
@@ -734,10 +1014,6 @@
         ? tabs.map((t) => (t.id === editingTabId ? tabData : t))
         : [...tabs, tabData];
 
-      const status = document.getElementById('save-status');
-      status.textContent = 'Saving...';
-      status.className = 'save-status';
-
       try {
         await api.setTabs(newTabs);
         tabs = newTabs;
@@ -745,7 +1021,16 @@
         renderTabBar();
         renderActiveContent();
         updateTabBarActions();
-        showView('content');
+
+        if (createdGistUrl) {
+          document.getElementById('gist-url-display').value = createdGistUrl;
+          document.getElementById('gist-url-row').classList.remove('hidden');
+          document.getElementById('gist-close-btn').classList.remove('hidden');
+          status.textContent = '✓ Gist created and tab added.';
+          status.className = 'save-status success';
+        } else {
+          showView('content');
+        }
       } catch {
         status.textContent = '✗ Failed to save.';
         status.className = 'save-status error';
