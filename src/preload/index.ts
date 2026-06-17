@@ -41,6 +41,12 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.on('update-status', (_event, data) => callback(data));
   },
 
+  createGist: (opts: { name: string; filename: string }): Promise<{ success: boolean; gistId?: string; gistUrl?: string; message?: string }> =>
+    ipcRenderer.invoke('create-gist', opts),
+
+  importGists: (): Promise<{ success: boolean; gists?: Array<{ id: string; description: string; filename: string }>; message?: string }> =>
+    ipcRenderer.invoke('import-gists'),
+
   startGithubAuth: (): Promise<{ started: boolean; userCode?: string; verificationUri?: string; message?: string }> =>
     ipcRenderer.invoke('start-github-auth'),
 
@@ -66,6 +72,9 @@ contextBridge.exposeInMainWorld('api', {
   onNavigateTab: (callback: (tabId: string) => void): void => {
     ipcRenderer.on('navigate-tab', (_event, tabId) => callback(tabId));
   },
+
+  openExternal: (url: string): Promise<void> =>
+    ipcRenderer.invoke('open-external', url),
 
   getPlatform: (): Promise<string> =>
     ipcRenderer.invoke('get-platform'),

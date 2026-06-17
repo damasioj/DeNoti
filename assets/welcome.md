@@ -1,54 +1,54 @@
 # 👋 Welcome to DeNoti
 
-DeNoti watches a data source and **automatically pops up this window whenever the content changes**. The rest of the time it sits quietly in your system tray.
-
-You're seeing this welcome file because it's the default source on a fresh install. Here's how to make DeNoti your own.
+DeNoti watches a data source and **automatically surfaces this window whenever the content changes**. The rest of the time it sits quietly in your system tray — no inbox, no noise.
 
 ---
 
-## Choosing a Data Source
+## 🚀 Getting Started
 
-Open **Settings** (the ⚙ button in the top-right, or the tray menu) and pick one of two source types:
+### 1. 🔗 Connect GitHub
 
-### 📁 Local File
-Point DeNoti at any text or Markdown file on your computer. DeNoti checks the file on each poll and pops up when its contents change on disk.
+Click the **⚙** icon in the top-right to open Global Settings, then click **Connect GitHub**. Authorize in your browser — no token to copy or paste. You only need to do this once.
 
-- Click **Browse…** to choose a file, or paste a path directly.
-- Great for reports written by another script, a synced cloud folder, or notes you update yourself.
+### 2. 🤖 Have your LLM create a Gist
 
-### ☁️ GitHub Gist
-Point DeNoti at a GitHub Gist by its ID. DeNoti polls the Gist and pops up when it's updated.
+Ask your LLM to create a GitHub Gist and set up a schedule or routine to write output to it periodically. Your prompt could be as simple as:
 
-- **Gist ID** — the part after your username in the URL: `gist.github.com/you/`**`GIST_ID`**
-- **Token** *(optional)* — a [personal access token](https://github.com/settings/tokens) with the `gist` scope. Required for private gists; also raises the API rate limit for public ones.
+*"Create a private GitHub Gist called daily-briefing.md, then set up a daily routine that researches [your topic] and updates that Gist with a summary."*
 
----
+Prefer to create the Gist yourself? Click **+**, name the tab, leave **Create a new Gist** toggled on, and click **Save**. DeNoti creates the Gist and shows you the URL to hand to your LLM.
 
-## Setting the Poll Interval
+### 3. 📥 Import the Gist into DeNoti
 
-Drag the **Poll Interval** slider to control how often DeNoti checks for changes — anywhere from **1 minute** to **24 hours**. A shorter interval means faster pop-ups; a longer one is gentler on resources and API limits.
+Go to **⚙ → Import Gists from GitHub**. DeNoti lists all your Gists, skipping any already tracked. Select the one your LLM created and click **Add Selected**.
 
-Click **Save & Start Polling** to apply your settings. DeNoti immediately checks the new source.
+DeNoti starts polling immediately — when the LLM writes new content, the tab lights up and a notification appears. ✨
 
 ---
 
-## Everyday Use
+## 📂 Data Sources
+
+| Source | When to use |
+|---|---|
+| ☁️ **GitHub Gist** | Default. Connect GitHub and import, or paste a Gist ID manually. |
+| 📁 **Local File** | Click **+**, switch to **Local File**, and pick any `.md`, `.html`, or `.txt` file. |
+
+> **Tip:** Clicking any local file link inside a tab opens it as a new DeNoti tab automatically.
+
+---
+
+## 🖥️ Everyday Use
 
 | Action | How |
 |---|---|
 | Show / hide the window | Left-click the tray icon |
-| Check for updates right now | **⟳** button, or tray → **Poll Now** |
-| Open settings | **⚙** button, or tray → **Settings** |
-| Quit completely | Tray → **Quit DeNoti**, or ⌘Q / Ctrl-Q |
+| Check for updates right now | **⟳** button, or tray → poll |
+| Open settings | **⚙** button |
+| Rename a tab | Double-click the tab label |
+| Quit completely | Tray → **Quit DeNoti** |
 
-Closing the window just hides it to the tray — DeNoti keeps polling in the background and will reappear when there's something new.
+Closing the window hides it to the tray — DeNoti keeps polling in the background.
 
 ---
 
-## Tip: Pair It With Automated Reports
-
-DeNoti was designed as a companion for scheduled reports. Have a cron job, a CI pipeline, or a Claude Code routine write its output to a Gist (or a local/synced file), then point DeNoti at it. Each time the report updates, DeNoti surfaces it for you — no inbox required.
-
-For a full walkthrough — creating a Gist, generating a GitHub token, writing a Claude Code Routine that posts its output to that Gist, and wiring it all up in DeNoti — see **`assets/setup-guide.md`** in the application folder.
-
-**Ready?** Open **Settings** and choose your source. 🚀
+📖 For the full setup walkthrough, see the [Setup Guide](setup-guide.md).

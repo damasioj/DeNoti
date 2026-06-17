@@ -160,6 +160,8 @@ All communication uses Electron's `ipcMain.handle` / `ipcRenderer.invoke` (reque
 | `get-update-support` | — | `boolean` | Whether updates are supported here (packaged on any platform) |
 | `check-for-updates` | — | `{ supported: boolean }` | Triggers an update check; progress arrives via `update-status` |
 | `install-mac-update` | — | `{ success: boolean }` | macOS only: runs install script, quits app, relaunches updated version |
+| `create-gist` | `{ name, filename }` | `{ success, gistId?, gistUrl?, message? }` | Creates a new private GitHub Gist using the stored token; returns the new ID and HTML URL |
+| `import-gists` | — | `{ success, gists?, message? }` | Fetches the authenticated user's gists (up to 100); each entry has `{ id, description, filename }` |
 | `start-github-auth` | — | `{ started, userCode?, verificationUri?, message? }` | Begins the GitHub OAuth device flow, opens the browser, starts polling |
 | `cancel-github-auth` | — | `void` | Stops the in-flight device-flow polling |
 | `toast-dismiss` | — | `void` | macOS toast asks to hide itself (after auto-dismiss) |
